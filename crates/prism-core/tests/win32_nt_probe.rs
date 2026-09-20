@@ -6,7 +6,7 @@
 
 // Probe test context: expect() on fixture setup is the failure mode.
 #![cfg(windows)]
-#![allow(clippy::expect_used, clippy::unwrap_used)]
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::undocumented_unsafe_blocks)]
 
 use std::io::Write as _;
 
