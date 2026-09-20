@@ -130,4 +130,7 @@ console.log('settings ok');
 fs.rmSync(root, { recursive: true, force: true });
 fs.rmSync(dbPath, { force: true });
 console.log('\nSMOKE OK — session-2 surface verified through the real .node');
-})().catch((err) => die(err && err.stack ? err.stack : String(err)));
+// The napi TSFN event pump keeps libuv alive; exit explicitly so CI pipes
+// never hang after a green run.
+process.exit(0);
+})().catch((err) => { die(err && err.stack ? err.stack : String(err)); process.exit(1); });

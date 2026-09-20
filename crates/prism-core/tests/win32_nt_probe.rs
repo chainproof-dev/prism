@@ -137,4 +137,35 @@ fn nt_probe_real_open_dir() {
          same path succeeded — path construction regressed",
         status_name(real)
     );
+
+    // 3. The FULL production enumeration on the same directory: open +
+    //    NtQueryDirectoryFile loop + record parsing. Must return the file
+    //    we wrote, without error, on the Extd (128-bit-id) class — this is
+    //    the class-value gate (an earlier build passed 19 where the
+    //    FILE_INFORMATION_CLASS ordinal is 60 → INVALID_INFO_CLASS).
+    let (count, enum_err, used_extd) = prism_core::scanner::win32::__probe_enumerate(&plain);
+    let _ = std::io::stdout().write_all(
+        format!(
+            "probe[real-enumerate] count={count} err={} extd={used_extd}\n",
+            enum_err
+                .map(status_name)
+                .unwrap_or_else(|| "none".to_string())
+        )
+        .as_bytes(),
+    );
+    let _ = std::io::stdout().flush();
+    assert_eq!(
+        enum_err,
+        None,
+        "real enumeration failed ({})",
+        enum_err.map(status_name).unwrap_or_default()
+    );
+    assert!(
+        count >= 1,
+        "real enumeration returned {count} entries — expected probe.txt"
+    );
+    assert!(
+        used_extd,
+        "kernel downgraded the Extd class on this volume — investigate before shipping"
+    );
 }

@@ -69,11 +69,18 @@ unsafe extern "system" {
     ) -> NTSTATUS;
 }
 
-// FileInformationClass values (NT names, kept verbatim):
+// FileInformationClass values (NT names, kept verbatim). The numeric
+// values are the FILE_INFORMATION_CLASS enum ordinals — cross-checked
+// against the winternl/ntifs enumeration:
+//   1  = FileDirectoryInformation
+//   60 = FileIdExtdDirectoryInformation  (NOT 19 — 19 is FileAllocation-
+//        Information territory; passing it to NtQueryDirectoryFile returns
+//        STATUS_INVALID_INFO_CLASS, exactly what the windows CI caught)
 const FILE_DIRECTORY_INFORMATION: u32 = 1;
-const FILE_ID_EXTD_DIRECTORY_INFORMATION: u32 = 0x13; // 19
+const FILE_ID_EXTD_DIRECTORY_INFORMATION: u32 = 60;
 
-// FILE_DIRECTORY_INFORMATION layout (tail shared with Extd where noted):
+// FILE_DIRECTORY_INFORMATION layout. FileNameLength is in BYTES and the
+// name is NOT NUL-terminated for this class.
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct FileDirectoryInfo {
@@ -87,10 +94,15 @@ struct FileDirectoryInfo {
     allocation_size: i64,
     file_attributes: u32,
     file_name_len: u32,
-    file_name: [u16; 1], // variable
+    file_name: [u16; 1], // variable, length from file_name_len
 }
 
-// FILE_ID_EXTD_DIRECTORY_INFORMATION layout:
+// FILE_ID_EXTD_DIRECTORY_INFORMATION layout. NOTE: this class has NO
+// FileNameLength field — the name is NUL-terminated (an early draft
+// invented a phantom length field, which read the first 4 bytes of the
+// name as a length). Name offset is taken with offset_of!, never
+// `size_of - 2`: repr(C) pads the struct tail to 8-byte alignment
+// (sizeof = 88, name at 84 — `size_of - 2` would be off by 4).
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct FileIdExtdDirectoryInfo {
@@ -105,10 +117,20 @@ struct FileIdExtdDirectoryInfo {
     file_attributes: u32,
     ea_size: u32,
     reparse_point_tag: u32,
-    file_id: [u8; 16], // FILE_ID_128
-    file_name_len: u32,
-    file_name: [u16; 1], // variable
+    file_id: [u8; 16],   // FILE_ID_128
+    file_name: [u16; 1], // variable, NUL-terminated
 }
+
+// ABI layout pinned to the documented Windows SDK sizes (x64). Any field
+// addition/removal/reorder breaks the build HERE instead of misparsing
+// kernel buffers at runtime. This is the guard that would have caught the
+// phantom-file_name_len bug at compile time.
+const _: () = {
+    assert!(std::mem::size_of::<FileDirectoryInfo>() == 72);
+    assert!(std::mem::offset_of!(FileDirectoryInfo, file_name) == 64);
+    assert!(std::mem::size_of::<FileIdExtdDirectoryInfo>() == 88);
+    assert!(std::mem::offset_of!(FileIdExtdDirectoryInfo, file_name) == 84);
+};
 
 // Attributes
 const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
@@ -122,6 +144,7 @@ const FILE_SYNCHRONOUS_IO_NONALERT: u32 = 0x20;
 const STATUS_NO_MORE_FILES: NTSTATUS = 0x8000_0006u32 as i32;
 const STATUS_NO_SUCH_FILE: NTSTATUS = 0xC000_000Fu32 as i32;
 const STATUS_ACCESS_DENIED: NTSTATUS = 0xC000_0022u32 as i32;
+const STATUS_INVALID_INFO_CLASS: NTSTATUS = 0xC000_0003u32 as i32;
 
 /// RAII NT file handle.
 struct NtHandle(HANDLE);
@@ -259,6 +282,14 @@ impl DirEnumerator for Win32NtEnumerator {
                 break;
             }
             if status < 0 {
+                // Extd class rejected by this kernel/filesystem (older builds,
+                // exotic redirectors) → capability downgrade to class 1, one
+                // retry of the whole directory (documented probe — build-time
+                // decision, never a per-directory silent fallback).
+                if status == STATUS_INVALID_INFO_CLASS && self.use_extd {
+                    self.use_extd = false;
+                    return self.enumerate_retry_plain(task);
+                }
                 if status == STATUS_ACCESS_DENIED && batch.count == 0 {
                     return DirBatch::error_batch(task.node, status as i32, "access denied".into());
                 }
@@ -305,6 +336,22 @@ pub fn __probe_open_dir_status(path16: &[u16]) -> i32 {
     }
 }
 
+/// Test/diagnostics bridge: run the FULL production enumeration (open +
+/// NtQueryDirectoryFile loop + parse) on a path with a throwaway enumerator.
+/// Returns (entry count, error code if any, whether the Extd class survived
+/// without downgrade). Used by tests/win32_nt_probe.rs.
+#[doc(hidden)]
+pub fn __probe_enumerate(path16: &[u16]) -> (usize, Option<i32>, bool) {
+    let task = DirTask {
+        node: 0,
+        path: path16.to_vec(),
+        depth: 0,
+    };
+    let mut e = Win32NtEnumerator::new(0);
+    let batch = e.enumerate(&task);
+    (batch.count, batch.error.map(|(c, _)| c), e.use_extd)
+}
+
 fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> bool {
     let mut off: usize = 0;
     while off < buf.len() {
@@ -315,13 +362,28 @@ fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> bo
             // SAFETY: the bounds check above guarantees a full record header
             // at `off`; NtQueryDirectoryFile lays records back-to-back.
             let rec: &FileIdExtdDirectoryInfo = unsafe { &*(buf.as_ptr().add(off) as *const _) };
-            let name_off = off + std::mem::size_of::<FileIdExtdDirectoryInfo>() - 2;
-            let name_len = rec.file_name_len as usize;
-            if name_off + name_len > buf.len() {
+            let next = rec.next_entry_offset as usize;
+            if next != 0 && next < std::mem::size_of::<FileIdExtdDirectoryInfo>() {
+                return false; // corrupt chain (next must clear the header)
+            }
+            // This class has NO length field: the name is NUL-terminated and
+            // bounded by the next record (or the end of the returned data).
+            let name_off = off + std::mem::offset_of!(FileIdExtdDirectoryInfo, file_name);
+            let span_end = if next != 0 {
+                (off + next).min(buf.len())
+            } else {
+                buf.len()
+            };
+            if name_off + 2 > span_end {
                 return false;
             }
-            // SAFETY: name bytes are inside buf (checked); /2 is the exact
-            // UTF-16 byte→code-unit conversion.
+            let mut name_end = name_off;
+            while name_end + 2 <= span_end && (buf[name_end] | buf[name_end + 1]) != 0 {
+                name_end += 2;
+            }
+            let name_len = name_end - name_off; // even byte count
+            // SAFETY: name bytes are inside buf (bounded above); /2 is the
+            // exact UTF-16 byte→code-unit conversion.
             #[allow(clippy::integer_division)]
             let name = unsafe {
                 std::slice::from_raw_parts(buf.as_ptr().add(name_off) as *const u16, name_len / 2)
@@ -338,10 +400,10 @@ fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> bo
             ) {
                 return false;
             }
-            if rec.next_entry_offset == 0 {
+            if next == 0 {
                 break;
             }
-            off += rec.next_entry_offset as usize;
+            off += next;
         } else {
             if off + std::mem::size_of::<FileDirectoryInfo>() > buf.len() {
                 return false;
@@ -349,8 +411,14 @@ fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> bo
             // SAFETY: the bounds check above guarantees a full record header
             // at `off` (same back-to-back layout contract as above).
             let rec: &FileDirectoryInfo = unsafe { &*(buf.as_ptr().add(off) as *const _) };
-            let name_off = off + std::mem::size_of::<FileDirectoryInfo>() - 2;
-            let name_len = rec.file_name_len as usize;
+            let next = rec.next_entry_offset as usize;
+            if next != 0 && next < std::mem::size_of::<FileDirectoryInfo>() {
+                return false; // corrupt chain (next must clear the header)
+            }
+            // offset_of! — never `size_of - 2`: repr(C) pads the tail to
+            // 8-byte alignment (sizeof = 72, name at 64).
+            let name_off = off + std::mem::offset_of!(FileDirectoryInfo, file_name);
+            let name_len = rec.file_name_len as usize; // BYTES for this class
             if name_off + name_len > buf.len() {
                 return false;
             }
@@ -375,10 +443,10 @@ fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> bo
             ) {
                 return false;
             }
-            if rec.next_entry_offset == 0 {
+            if next == 0 {
                 break;
             }
-            off += rec.next_entry_offset as usize;
+            off += next;
         }
     }
     true
