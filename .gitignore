@@ -10,11 +10,16 @@ out/
 # Dependencies
 node_modules/
 
-# Env / secrets — NEVER commit (docs/19-AGENT-PROTOCOL.md A9)
+# Env / secrets — NEVER commit (docs/19-AGENT-PROTOCOL.md A9).
+# EXCEPTION (docs/13 § 8): the deterministic DEV Ed25519 keypair is committed
+# on purpose — dev builds embed its public half and CI dual-runs the
+# server+engine contract. Production keys are injected from CI secrets.
 .env
 .env.*
 dev-keys/*.pem
+!dev-keys/ed25519.pem
 dev-keys/*private*
+!dev-keys/ed25519.pem
 
 # Logs & databases (dev artifacts)
 *.db

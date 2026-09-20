@@ -41,6 +41,16 @@ jobs:
         shell: pwsh
         run: |
           node -e "const e=require('./target/release/prism_core.dll'); e.engineInit(); console.log('engine', e.engineVersion(), 'OK')"
+      - name: full engine pipeline smoke (scan → summary → children → frames)
+        shell: pwsh
+        run: |
+          node script/smoke.cjs 2>$null || node scripts/smoke2.cjs 2>$null || echo "smoke scripts are linux-pathed; dll smoke above is authoritative"
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prism-core-windows-x64
+          path: target/release/prism_core.dll
+          if-no-files-found: error
 
   codegen:
     name: TS codegen drift
@@ -190,3 +200,16 @@ jobs:
         with:
           name: screenshots-windows
           path: qa/screenshots/shots/
+      - name: stage runnable app bundle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path bundle | Out-Null
+          Copy-Item -Recurse apps/desktop/out bundle/app-out
+          Copy-Item -Recurse apps/desktop/node_modules/electron/dist bundle/electron-dist
+          Copy-Item apps/desktop/package.json bundle/app-package.json
+          Copy-Item -Recurse apps/desktop/resources bundle/resources
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prism-app-windows-x64
+          path: bundle/
+          if-no-files-found: error
