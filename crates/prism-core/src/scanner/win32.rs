@@ -302,6 +302,17 @@ impl Win32NtEnumerator {
     }
 }
 
+/// Test/diagnostics bridge: run the REAL open_dir on a path and return the
+/// raw NTSTATUS (0 on success). Used by tests/win32_nt_probe.rs so the probe
+/// witnesses the production code path, not a copy of it.
+#[doc(hidden)]
+pub fn __probe_open_dir_status(path16: &[u16]) -> i32 {
+    match Win32NtEnumerator::open_dir(path16) {
+        Ok(_) => 0,
+        Err((code, _)) => code,
+    }
+}
+
 fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> bool {
     let mut off: usize = 0;
     while off < buf.len() {
