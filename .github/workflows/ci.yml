@@ -1,0 +1,82 @@
+name: CI
+
+# Gate chain (docs/17 § 3): fmt, clippy, test, lint, typecheck, vitest,
+# codegen drift, trace scan, docs links. All PR-blocking.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    name: Rust (fmt · clippy · test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  codegen:
+    name: TS codegen drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo run -q -p prism-types --features emit --bin emit-ts -- --check packages/shared/src/generated/
+      - run: git diff --exit-code -- packages/shared/src/generated/
+
+  js:
+    name: JS (typecheck · lint · test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter license-server test
+      - run: pnpm --filter shared test
+      - run: pnpm --filter desktop build
+
+  trace:
+    name: Trace scanner + docs links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node script/trace-scan.mjs
+      - run: node script/link-check.mjs
+
+  fixtures:
+    name: Fixtures deterministic
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 qa/mkfixtures.py --fix-s --out /tmp/fx1
+      - run: python3 qa/mkfixtures.py --fix-s --out /tmp/fx2
+      - run: diff -r /tmp/fx1 /tmp/fx2
+
+  windows:
+    name: Windows (engine cfg(windows) compile + smoke)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p prism-core
+      - run: cargo test --workspace
+      - run: cargo build --release -p prism-core
+      - name: engine napi smoke
+        run: node -e "const e=require('./target/release/prism_core.dll'); e.engineInit(); console.log('engine ok', e.engineVersion())"

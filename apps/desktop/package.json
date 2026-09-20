@@ -1,0 +1,40 @@
+{
+  "name": "desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "PRISM desktop app (Electron + React renderer)",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "build:engine": "cargo build --release -p prism-core && node ../../script/copy-engine.mjs"
+  },
+  "dependencies": {
+    "@prism/shared": "workspace:*",
+    "@tanstack/react-virtual": "3.14.13",
+    "cmdk": "1.1.1",
+    "electron-updater": "latest",
+    "lucide-react": "1.47.0",
+    "motion": "13.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "sonner": "2.0.8",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "6.1.1",
+    "electron": "44.4.3",
+    "electron-vite": "5.0.0",
+    "tailwindcss": "4.3.3",
+    "@tailwindcss/vite": "latest",
+    "typescript": "7.0.2",
+    "vite": "8.3.0",
+    "vitest": "5.0.1"
+  }
+}

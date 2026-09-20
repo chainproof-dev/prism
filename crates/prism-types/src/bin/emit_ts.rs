@@ -123,10 +123,12 @@ fn parse_file(src: &str, model: &mut Model) {
                 model.aliases.insert(ident.to_string(), ty);
             }
             Item::Struct(ItemStruct { ident, fields, .. }) => {
-                model.structs.insert(
-                    ident.to_string(),
-                    fields.named.iter().map(field_ts).collect(),
-                );
+                if let syn::Fields::Named(named) = fields {
+                    model.structs.insert(
+                        ident.to_string(),
+                        named.named.iter().map(field_ts).collect(),
+                    );
+                }
             }
             Item::Enum(ItemEnum {
                 ident,
@@ -135,24 +137,36 @@ fn parse_file(src: &str, model: &mut Model) {
                 ..
             }) => {
                 let rename_all =
-                    serde_str_attr(attrs, "rename_all").unwrap_or_else(|| "camelCase".into());
-                let tag = serde_str_attr(attrs, "tag");
+                    serde_str_attr(&attrs, "rename_all").unwrap_or_else(|| "camelCase".into());
+                let tag = serde_str_attr(&attrs, "tag");
                 let mut out = Vec::new();
                 for v in variants {
                     let mut fields = Vec::new();
-                    for f in v.fields.iter() {
-                        fields.push(field_ts(f));
+                    if let syn::Fields::Named(named) = &v.fields {
+                        for f in named.named.iter() {
+                            fields.push(field_ts(f));
+                        }
                     }
                     out.push((wire_name(&v.ident.to_string(), &rename_all), fields));
                 }
                 model.enums.insert(ident.to_string(), (tag, out));
             }
             Item::Const(ItemConst { ident, expr, .. }) if ident == "COMMANDS" => {
-                parse_commands(expr, model);
+                parse_commands(&expr, model);
             }
             _ => {}
         }
     }
+}
+
+/// Extract a string literal from an expression (None otherwise).
+fn lit_str(e: &Expr) -> Option<String> {
+    if let Expr::Lit(inner) = e {
+        if let Lit::Str(s) = &inner.lit {
+            return Some(s.value());
+        }
+    }
+    None
 }
 
 fn parse_commands(expr: &Expr, model: &mut Model) {
@@ -169,31 +183,15 @@ fn parse_commands(expr: &Expr, model: &mut Model) {
                 syn::Member::Named(m) => m.to_string(),
                 syn::Member::Unnamed(_) => continue,
             };
-            match (&f.expr, member.as_str()) {
-                (
-                    Expr::Lit(Expr::Lit {
-                        lit: Lit::Str(s), ..
-                    }),
-                    "cmd",
-                ) => cmd = s.value(),
-                (
-                    Expr::Lit(Expr::Lit {
-                        lit: Lit::Str(s), ..
-                    }),
-                    "req",
-                ) => req = s.value(),
-                (
-                    Expr::Lit(Expr::Lit {
-                        lit: Lit::Str(s), ..
-                    }),
-                    "res",
-                ) => res = s.value(),
-                (Expr::Call(c), "premium") => {
-                    if let Some(Expr::Lit(Expr::Lit {
-                        lit: Lit::Str(s), ..
-                    })) = c.args.first()
-                    {
-                        premium = Some(s.value());
+            match (lit_str(&f.expr), member.as_str()) {
+                (Some(v), "cmd") => cmd = v,
+                (Some(v), "req") => req = v,
+                (Some(v), "res") => res = v,
+                (_, "premium") => {
+                    if let Expr::Call(c) = &f.expr {
+                        if let Some(arg) = c.args.first() {
+                            premium = lit_str(arg);
+                        }
                     }
                 }
                 _ => {}
@@ -222,11 +220,8 @@ fn serde_str_attr(attrs: &[syn::Attribute], key: &str) -> Option<String> {
         for m in list {
             if let syn::Meta::NameValue(nv) = m {
                 if nv.path.is_ident(key) {
-                    if let Expr::Lit(Expr::Lit {
-                        lit: Lit::Str(s), ..
-                    }) = nv.value
-                    {
-                        return Some(s.value());
+                    if let Some(v) = lit_str(&nv.value) {
+                        return Some(v);
                     }
                 }
             }
@@ -337,8 +332,9 @@ fn map_ident(ident: &str) -> String {
     match ident {
         "String" | "PathBuf" => "string".into(),
         "bool" => "boolean".into(),
-        "u8" | "u16" | "u32" | "i8" | "i16" | "i32" | "usize" | "isize" | "f32" | "f64" | "u64"
-        | "i64" | "u128" => "number".into(),
+        // byte counts cross as BigInt (docs/05 § 3.3 — exact end-to-end)
+        "u64" | "i64" | "u128" => "bigint".into(),
+        "u8" | "u16" | "u32" | "i8" | "i16" | "i32" | "usize" | "isize" | "f32" | "f64" => "number".into(),
         _ => ident.to_string(),
     }
 }
@@ -499,6 +495,7 @@ fn zod_expr(ty: &str) -> String {
     match ty {
         "string" => "z.string()".into(),
         "number" => "z.number()".into(),
+        "bigint" => "z.bigint()".into(),
         "boolean" => "z.boolean()".into(),
         other => format!("z.lazy(() => {other}Schema)"),
     }
@@ -570,7 +567,7 @@ fn emit_events(m: &Model) -> String {
         for (tag, fields) in variants {
             let payload = fields
                 .first()
-                .map(|f| format!("{}: {}", f.name, f.ty))
+                .map(|f| format!("{}: P.{}", f.name, f.ty))
                 .unwrap_or_else(|| "payload: unknown".into());
             out.push_str(&format!("  | {{ ev: '{tag}'; {payload} }}\n"));
         }
@@ -580,7 +577,7 @@ fn emit_events(m: &Model) -> String {
             let event = kebab_to_colon(tag);
             let payload_ty = fields
                 .first()
-                .map(|f| f.ty.clone())
+                .map(|f| format!("P.{}", f.ty))
                 .unwrap_or_else(|| "unknown".into());
             out.push_str(&format!("  '{event}': {{ payload: {payload_ty} }};\n"));
         }

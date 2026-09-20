@@ -1,4 +1,4 @@
-//! Extension/type statistics (WDS-EXT-01) + cleanup/duplicates DTOs.
+//! Extension/type statistics (parity-EXT-01) + cleanup/duplicates DTOs.
 
 use serde::{Deserialize, Serialize};
 

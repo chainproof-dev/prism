@@ -1,0 +1,26 @@
+{
+  "name": "@prism/shared",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./generated": "./src/generated/index.ts",
+    "./viz-frame": "./src/viz-frame.ts"
+  },
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "build": "tsc -p tsconfig.json --noEmit",
+    "gen:zod": "node -e \"console.log('zod schemas generated from Rust by emit-ts; no separate step')\""
+  },
+  "dependencies": {
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "5.0.1"
+  }
+}

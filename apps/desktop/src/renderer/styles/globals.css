@@ -1,0 +1,259 @@
+@import 'tailwindcss';
+
+/*
+ * PRISM design tokens (docs/08-UI-DESIGN-SYSTEM.md) — "precision instrument".
+ * OKLCH-defined, rendered as CSS custom properties; Tailwind 4 maps them via
+ * @theme. Six themes; adding a theme = one block below, never component edits
+ * (PRISM-DS-010). Data colors (the 12-hue spectrum) live in viz/palette.ts.
+ */
+
+:root,
+[data-theme='nocturne'] {
+  --surface-app: oklch(0.145 0.012 264);
+  --surface-panel: oklch(0.185 0.014 264);
+  --surface-raised: oklch(0.225 0.016 264);
+  --surface-inset: oklch(0.12 0.01 264);
+  --surface-overlay: oklch(0.25 0.018 264);
+  --surface-hover: rgb(255 255 255 / 0.05);
+  --surface-active: rgb(255 255 255 / 0.08);
+  --border-hairline: oklch(0.32 0.014 264);
+  --border-strong: oklch(0.42 0.016 264);
+  --border-data: rgb(7 9 14 / 0.85);
+  --text-primary: oklch(0.955 0.004 264);
+  --text-secondary: oklch(0.76 0.008 264);
+  --text-muted: oklch(0.59 0.01 264);
+  --text-faint: oklch(0.45 0.01 264);
+  --accent: oklch(0.845 0.135 205);
+  --accent-hover: oklch(0.885 0.12 205);
+  --accent-pressed: oklch(0.8 0.13 205);
+  --accent-contrast: oklch(0.145 0.012 264);
+  --accent-subtle: oklch(0.845 0.135 205 / 0.14);
+  --signal-success: oklch(0.78 0.15 155);
+  --signal-warning: oklch(0.83 0.145 85);
+  --signal-danger: oklch(0.68 0.19 25);
+  --focus-ring: oklch(0.845 0.135 205 / 0.6);
+  color-scheme: dark;
+}
+
+[data-theme='graphite'] {
+  --surface-app: oklch(0.14 0.004 270);
+  --surface-panel: oklch(0.175 0.004 270);
+  --surface-raised: oklch(0.215 0.005 270);
+  --surface-inset: oklch(0.115 0.003 270);
+  --surface-overlay: oklch(0.24 0.005 270);
+  --border-hairline: oklch(0.31 0.005 270);
+  --border-strong: oklch(0.42 0.006 270);
+  --text-primary: oklch(0.96 0.003 270);
+  --text-secondary: oklch(0.77 0.005 270);
+  --text-muted: oklch(0.6 0.006 270);
+  --text-faint: oklch(0.46 0.006 270);
+  --accent: oklch(0.87 0.06 90); /* warm ivory */
+  --accent-hover: oklch(0.9 0.05 90);
+  --accent-pressed: oklch(0.83 0.06 90);
+  --accent-contrast: oklch(0.14 0.004 270);
+  --accent-subtle: oklch(0.87 0.06 90 / 0.14);
+  --signal-success: oklch(0.78 0.15 155);
+  --signal-warning: oklch(0.83 0.145 85);
+  --signal-danger: oklch(0.68 0.19 25);
+  --focus-ring: oklch(0.87 0.06 90 / 0.6);
+  color-scheme: dark;
+}
+
+[data-theme='verdigris'] {
+  --surface-app: oklch(0.15 0.012 165);
+  --surface-panel: oklch(0.19 0.014 165);
+  --surface-raised: oklch(0.23 0.016 165);
+  --surface-inset: oklch(0.125 0.01 165);
+  --surface-overlay: oklch(0.255 0.018 165);
+  --border-hairline: oklch(0.32 0.014 165);
+  --border-strong: oklch(0.43 0.016 165);
+  --text-primary: oklch(0.955 0.006 165);
+  --text-secondary: oklch(0.77 0.01 165);
+  --text-muted: oklch(0.6 0.012 165);
+  --text-faint: oklch(0.46 0.012 165);
+  --accent: oklch(0.72 0.1 55); /* patina copper */
+  --accent-hover: oklch(0.77 0.09 55);
+  --accent-pressed: oklch(0.67 0.1 55);
+  --accent-contrast: oklch(0.15 0.012 165);
+  --accent-subtle: oklch(0.72 0.1 55 / 0.14);
+  --signal-success: oklch(0.78 0.15 155);
+  --signal-warning: oklch(0.83 0.145 85);
+  --signal-danger: oklch(0.68 0.19 25);
+  --focus-ring: oklch(0.72 0.1 55 / 0.6);
+  color-scheme: dark;
+}
+
+[data-theme='ember'] {
+  --surface-app: oklch(0.15 0.012 45);
+  --surface-panel: oklch(0.19 0.014 45);
+  --surface-raised: oklch(0.23 0.016 45);
+  --surface-inset: oklch(0.125 0.01 45);
+  --surface-overlay: oklch(0.255 0.018 45);
+  --border-hairline: oklch(0.32 0.014 45);
+  --border-strong: oklch(0.43 0.016 45);
+  --text-primary: oklch(0.955 0.006 45);
+  --text-secondary: oklch(0.77 0.01 45);
+  --text-muted: oklch(0.6 0.012 45);
+  --text-faint: oklch(0.46 0.012 45);
+  --accent: oklch(0.75 0.15 45); /* ember orange */
+  --accent-hover: oklch(0.8 0.14 45);
+  --accent-pressed: oklch(0.7 0.15 45);
+  --accent-contrast: oklch(0.15 0.012 45);
+  --accent-subtle: oklch(0.75 0.15 45 / 0.14);
+  --signal-success: oklch(0.78 0.15 155);
+  --signal-warning: oklch(0.83 0.145 85);
+  --signal-danger: oklch(0.68 0.19 25);
+  --focus-ring: oklch(0.75 0.15 45 / 0.6);
+  color-scheme: dark;
+}
+
+[data-theme='alabaster'] {
+  --surface-app: oklch(0.965 0.004 250);
+  --surface-panel: oklch(0.945 0.005 250);
+  --surface-raised: oklch(1 0 0);
+  --surface-inset: oklch(0.925 0.006 250);
+  --surface-overlay: oklch(0.99 0.003 250);
+  --surface-hover: rgb(0 0 0 / 0.04);
+  --surface-active: rgb(0 0 0 / 0.07);
+  --border-hairline: oklch(0.88 0.006 250);
+  --border-strong: oklch(0.78 0.008 250);
+  --border-data: rgb(30 34 44 / 0.85);
+  --text-primary: oklch(0.24 0.015 260);
+  --text-secondary: oklch(0.42 0.014 260);
+  --text-muted: oklch(0.56 0.012 260);
+  --text-faint: oklch(0.7 0.01 260);
+  --accent: oklch(0.5 0.09 200); /* deep teal */
+  --accent-hover: oklch(0.45 0.09 200);
+  --accent-pressed: oklch(0.55 0.09 200);
+  --accent-contrast: oklch(0.99 0 0);
+  --accent-subtle: oklch(0.5 0.09 200 / 0.12);
+  --signal-success: oklch(0.55 0.14 155);
+  --signal-warning: oklch(0.6 0.13 85);
+  --signal-danger: oklch(0.55 0.18 25);
+  --focus-ring: oklch(0.5 0.09 200 / 0.55);
+  color-scheme: light;
+}
+
+[data-theme='terracotta'] {
+  --surface-app: oklch(0.955 0.012 60);
+  --surface-panel: oklch(0.935 0.014 60);
+  --surface-raised: oklch(0.985 0.008 60);
+  --surface-inset: oklch(0.915 0.016 60);
+  --surface-overlay: oklch(0.975 0.01 60);
+  --surface-hover: rgb(80 50 30 / 0.05);
+  --surface-active: rgb(80 50 30 / 0.08);
+  --border-hairline: oklch(0.86 0.016 60);
+  --border-strong: oklch(0.76 0.018 60);
+  --border-data: rgb(58 40 30 / 0.85);
+  --text-primary: oklch(0.26 0.02 45);
+  --text-secondary: oklch(0.44 0.018 45);
+  --text-muted: oklch(0.58 0.016 45);
+  --text-faint: oklch(0.71 0.014 45);
+  --accent: oklch(0.52 0.13 35); /* burnt sienna */
+  --accent-hover: oklch(0.47 0.13 35);
+  --accent-pressed: oklch(0.57 0.13 35);
+  --accent-contrast: oklch(0.98 0.006 60);
+  --accent-subtle: oklch(0.52 0.13 35 / 0.12);
+  --signal-success: oklch(0.55 0.14 155);
+  --signal-warning: oklch(0.6 0.13 85);
+  --signal-danger: oklch(0.55 0.18 25);
+  --focus-ring: oklch(0.52 0.13 35 / 0.55);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-surface-app: var(--surface-app);
+  --color-surface-panel: var(--surface-panel);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-inset: var(--surface-inset);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-hairline: var(--border-hairline);
+  --color-border-strong: var(--border-strong);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-pressed: var(--accent-pressed);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-success: var(--signal-success);
+  --color-warning: var(--signal-warning);
+  --color-danger: var(--signal-danger);
+
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --font-ui: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', ui-monospace, monospace;
+
+  /* motion (docs/08 § 8) */
+  --ease-instrument: cubic-bezier(0.2, 0, 0, 1);
+  --ease-screen: cubic-bezier(0.05, 0.7, 0.1, 1);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--surface-app);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* tabular numerals everywhere numbers appear (docs/08 § 1.4) */
+.num,
+td.num,
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* focus-visible contract (PRISM-CMP-004) */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* hairline scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-hairline) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-hairline);
+  border-radius: 4px;
+}
+
+/* micro-label pattern (docs/08 § 2) */
+.micro-label {
+  font-size: 10px;
+  line-height: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

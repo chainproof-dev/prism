@@ -2,7 +2,7 @@
   "name": "prism-monorepo",
   "private": true,
   "version": "0.1.0",
-  "description": "PRISM — Windows disk analyzer (Electron + React + TypeScript + Vite, Rust core engine). Internal codename; shipping name is an owner decision (docs/00-INDEX.md).",
+  "description": "PRISM \u2014 Windows disk analyzer (Electron + React + TypeScript + Vite, Rust core engine). Internal codename; shipping name is an owner decision (docs/00-INDEX.md).",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=24 <25"

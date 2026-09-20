@@ -62,7 +62,7 @@ impl DirEnumerator for PosixDevEnumerator {
                 Ok(m) => m,
                 Err(_) => {
                     // Stat failure on one entry does not abort the directory
-                    // (WDS-SCN-05 class): push an unknown-size entry.
+                    // (parity-SCN-05 class): push an unknown-size entry.
                     batch.name_off.push(batch.names.len() as u32);
                     batch.names.extend_from_slice(&name16);
                     batch.names.push(0);

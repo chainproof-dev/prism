@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ids::{CategoryId, EntryKind, FileId, NodeBadge, NodeId, ScanId, SortSpec, UnixMs};
 
-/// What to scan (multi-root allowed, docs/05 § 3.2 / WDS-SEL-04).
+/// What to scan (multi-root allowed, docs/05 § 3.2 / parity-SEL-04).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum ScanTarget {
@@ -22,7 +22,7 @@ pub enum ScanTarget {
     Home,
 }
 
-/// Size accounting mode (WDS-SCN-07 / WDS-DSP-04).
+/// Size accounting mode (parity-SCN-07 / parity-DSP-04).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum SizeMode {
@@ -48,7 +48,7 @@ pub enum ScanStrategy {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScanOptions {
-    /// Follow junctions/symlinks (default false, WDS-SCN-06).
+    /// Follow junctions/symlinks (default false, parity-SCN-06).
     pub follow_reparse: bool,
     /// Active size accounting mode.
     pub size_mode: SizeMode,
@@ -177,7 +177,7 @@ pub enum ScanPhase {
     Paused,
 }
 
-/// Per-path scan error (errors drawer row, WDS-SCN-05).
+/// Per-path scan error (errors drawer row, parity-SCN-05).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PathError {

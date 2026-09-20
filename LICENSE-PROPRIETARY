@@ -1,0 +1,13 @@
+PRISM — Proprietary Software License (internal codename; shipping name TBD)
+
+Copyright (c) 2026 PRISM Project Contributors. All rights reserved.
+
+This repository and its build plan architecture are proprietary. The desktop
+application, engine, license server, and all accompanying source files are
+licensed ONLY to the project owner. No redistribution, no sublicensing.
+
+Third-party components retain their upstream licenses (MIT/Apache-2.0/ISC/
+OFL-1.1 — see docs/20-DEPENDENCY-MANIFEST.md § 5). The GPL-licensed reference
+tool analyzed in docs/03-PORTING-MATRIX-WINDIRSTAT.md was studied
+behaviorally under a clean-room protocol; none of its code, assets, or
+resources appear in this repository.

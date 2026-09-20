@@ -128,9 +128,9 @@ static PENDING_RX: std::sync::OnceLock<crossbeam_channel::Receiver<EngineEvent>>
 /// drain thread that batches events into JSON batch strings.
 #[napi]
 pub fn engine_attach_event_sink(callback: Function<'_, String, ()>) -> Result<()> {
-    let tsfn: ThreadsafeFunction<String, (), String> = callback
+    let tsfn: ThreadsafeFunction<String, (), String, napi::Status, false> = callback
         .build_threadsafe_function::<String>()
-        .callee_handled::<true>()
+        .callee_handled::<false>()
         .build()?;
     let rx = PENDING_RX
         .get()
@@ -167,13 +167,13 @@ pub fn engine_attach_event_sink(callback: Function<'_, String, ()>) -> Result<()
     Ok(())
 }
 
-fn flush(tsfn: &ThreadsafeFunction<String, (), String>, batch: &mut Vec<EngineEvent>) {
+fn flush(tsfn: &ThreadsafeFunction<String, (), String, napi::Status, false>, batch: &mut Vec<EngineEvent>) {
     if batch.is_empty() {
         return;
     }
     match serde_json::to_string(batch.as_slice()) {
         Ok(json) => {
-            tsfn.call(Ok(json), ThreadsafeFunctionCallMode::NonBlocking);
+            tsfn.call(json, ThreadsafeFunctionCallMode::NonBlocking);
         }
         Err(e) => {
             // serialization of engine events cannot fail structurally; if it
@@ -493,11 +493,12 @@ pub fn node_path(arena: &Arena, node: NodeId, root_path: &str) -> String {
         guard += 1;
     }
     parts.reverse();
-    let joined = parts.join("\\");
+    let sep = if cfg!(windows) { "\\" } else { "/" };
+    let joined = parts.join(sep);
     if joined.is_empty() {
         return root_path.to_string();
     }
-    format!("{}{}{}", root_path.trim_end_matches('\\'), "\\", joined)
+    format!("{}{}{}", root_path.trim_end_matches(['\\', '/']), sep, joined)
 }
 
 #[napi]

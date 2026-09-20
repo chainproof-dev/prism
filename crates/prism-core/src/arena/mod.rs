@@ -396,7 +396,7 @@ impl Arena {
         self.err_code[node as usize] = code;
     }
 
-    /// Remove a deleted node's bytes up the chain (WDS-DEL-03) and drop the
+    /// Remove a deleted node's bytes up the chain (parity-DEL-03) and drop the
     /// CSR row. Node ids stay stable (hole-punched); children list of parent
     /// rebuilds. Returns reclaimed allocated bytes.
     pub fn remove_node(&mut self, node: NodeId) -> u64 {

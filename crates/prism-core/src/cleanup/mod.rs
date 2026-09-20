@@ -1,5 +1,5 @@
 //! Cleanup engine surface: preset rule table (docs/12 § 2) + protected-path
-//! blocklist (WDS-DEL-05) + staging queue. Deletion execution itself is
+//! blocklist (parity-DEL-05) + staging queue. Deletion execution itself is
 //! platform IFileOperation-class work (Windows, Phase 5) — staging,
 //! matching and safety classification are pure and shipped now.
 
@@ -135,7 +135,7 @@ pub const PRESETS: &[Preset] = &[
     },
 ];
 
-/// Hard blocklist roots (WDS-DEL-05): never stageable, even with
+/// Hard blocklist roots (parity-DEL-05): never stageable, even with
 /// acknowledgement — deleting these breaks Windows itself.
 pub const BLOCKED_ROOTS: &[&str] = &[
     "C:\\Windows",

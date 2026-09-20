@@ -8,7 +8,7 @@ use crate::ids::{NodeId, ScanId};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum VizMode {
-    /// Squarified cushion treemap (default, parity WDS-TMP).
+    /// Squarified cushion treemap (default; parity TMP rows).
     Treemap,
     /// Radial icicle (angle ∝ size, rings = depth).
     Sunburst,
@@ -58,7 +58,7 @@ pub struct VizOptions {
     pub min_share: f32,
     /// Drawn depth cutoff (default 6, slider 2–12).
     pub drawn_depth: u8,
-    /// Tile gap px (0–3, WDS-TMP-07).
+    /// Tile gap px (0–3, parity-TMP-07).
     pub gap_px: u8,
     /// Cushion elevation E (default 0.55).
     pub cushion_elevation: f32,

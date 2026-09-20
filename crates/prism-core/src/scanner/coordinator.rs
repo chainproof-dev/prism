@@ -5,7 +5,7 @@
 //! work-stealing deque upgrade is a measured change — bench-scan gates it).
 //! Cancellation is cooperative (≤ 50 ms); pause parks workers on a condvar.
 //! Directory completion cascades bottom-up so the UI sees live sizes
-//! (WDS-SCN-02). Free-space/unknown pseudo-nodes attach before CSR finalize.
+//! (parity-SCN-02). Free-space/unknown pseudo-nodes attach before CSR finalize.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -370,7 +370,7 @@ fn run_scan(
         let (name, single): (String, bool) = if roots.len() == 1 {
             (root_name(&roots[0]), true)
         } else {
-            ("This PC".to_string(), false) // synthetic multi-root (WDS-SEL-04)
+            ("This PC".to_string(), false) // synthetic multi-root (parity-SEL-04)
         };
         let name16: Vec<u16> = name.encode_utf16().collect();
         let rid = arena.push(NodeInput {
@@ -749,7 +749,7 @@ fn run_scan(
         });
     }
 
-    // free-space pseudo-node (WDS-SCN-04) + unknown (WDS-SCN-05)
+    // free-space pseudo-node (parity-SCN-04) + unknown (parity-SCN-05)
     let free_bytes = crate::sysinfo::volume_free_bytes(&roots[0]);
     {
         let name16: Vec<u16> = "<free space>".encode_utf16().collect();
@@ -826,7 +826,7 @@ fn run_scan(
 }
 
 /// Complete a directory and cascade upward, emitting refresh deltas
-/// (live sizes, WDS-SCN-02).
+/// (live sizes, parity-SCN-02).
 fn complete_cascade(
     arena: &mut Arena,
     pending: &mut [u32],

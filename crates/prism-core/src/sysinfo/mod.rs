@@ -241,7 +241,7 @@ pub mod win32 {
                 .collect::<Vec<u16>>();
             let dt = unsafe { GetDriveTypeW(root.as_mut_ptr()) };
             if dt == DRIVE_NO_ROOT_DIR {
-                continue; // no media (WDS-SEL-03)
+                continue; // no media (parity-SEL-03)
             }
             let kind = match dt {
                 DRIVE_FIXED => VolumeKind::Fixed,

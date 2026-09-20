@@ -8,7 +8,7 @@ use crate::licensing::Sku;
 use crate::scan::{PathError, ScanPhase, ScanSummary};
 use crate::types_list::DupesPhase;
 
-/// A streamed node delta (live tree building, WDS-SCN-02).
+/// A streamed node delta (live tree building, parity-SCN-02).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NodeDelta {
