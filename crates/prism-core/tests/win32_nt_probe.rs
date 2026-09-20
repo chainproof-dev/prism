@@ -4,7 +4,9 @@
 //! codes in its message — it exists to make win32 backend defects
 //! debuggable from a remote runner.
 
+// Probe test context: expect() on fixture setup is the failure mode.
 #![cfg(windows)]
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use std::io::Write as _;
 
