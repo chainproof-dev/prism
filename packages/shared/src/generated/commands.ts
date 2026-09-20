@@ -42,6 +42,7 @@ export type CommandName =
   | 'monitor:stop'
   | 'export:scan'
   | 'lic:verify-token'
+  | 'engine:recent-scans'
   ;
 
 export interface CommandsMap {
@@ -83,6 +84,7 @@ export interface CommandsMap {
   'monitor:stop': { req: P.MonitorQuery; res: void };
   'export:scan': { req: P.ExportQuery; res: P.ExportResult };
   'lic:verify-token': { req: P.VerifyTokenQuery; res: P.EntitlementGrants };
+  'engine:recent-scans': { req: P.ScanHistoryQuery; res: P.ScanHistoryPage };
 }
 
 import * as S from './schemas';
@@ -126,6 +128,7 @@ export interface RequestSchemas {
   'monitor:stop': typeof S.MonitorQuerySchema;
   'export:scan': typeof S.ExportQuerySchema;
   'lic:verify-token': typeof S.VerifyTokenQuerySchema;
+  'engine:recent-scans': typeof S.ScanHistoryQuerySchema;
 }
 
 export const PremiumCommands: Record<string, P.PremiumFeature> = {

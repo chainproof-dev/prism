@@ -454,6 +454,14 @@ export interface ScanErrorBatch {
   errors: PathError[];
 }
 
+export interface ScanHistoryPage {
+  records: ScanRecordDto[];
+}
+
+export interface ScanHistoryQuery {
+  limit: number;
+}
+
 export interface ScanNodes {
   scanId: ScanId;
   deltas: NodeDelta[];
@@ -480,6 +488,16 @@ export interface ScanProgress {
   currentPath: string;
   elapsedMs: bigint;
   rateFilesPerSec: number;
+}
+
+export interface ScanRecordDto {
+  startedAt: bigint;
+  target: string;
+  strategy: string;
+  files: bigint;
+  folders: bigint;
+  bytes: bigint;
+  durationMs: bigint;
 }
 
 export interface ScanStartQuery {

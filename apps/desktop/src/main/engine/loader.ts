@@ -25,6 +25,34 @@ export interface EngineModule {
   typesList(scanId: number, sort: string, dir: string): unknown;
   filterApply(scanId: number, name: string, kind: string): unknown;
   licVerifyToken(tokenB64: string, feature: string): unknown;
+  // -- extension surface (ipc/extend.rs) -------------------------------------
+  sysPreflight(payload: unknown): unknown;
+  scanRescanSubtree(payload: unknown): unknown;
+  scanReattach(scanId: number): unknown;
+  nodeResolvePath(payload: unknown): unknown;
+  vizColorMapping(payload: unknown): unknown;
+  typesSetColor(payload: unknown): void;
+  duplicatesRun(payload: unknown): unknown;
+  duplicatesCancel(scanId: number): void;
+  duplicatesGroups(payload: unknown): unknown;
+  cleanupPresetsScan(scanId: number): unknown;
+  cleanupStage(payload: unknown): unknown;
+  cleanupUnstage(payload: unknown): unknown;
+  cleanupQueue(): unknown;
+  cleanupExecute(payload: unknown): unknown;
+  appsList(payload: unknown): unknown;
+  appsFootprint(payload: unknown): unknown;
+  appsLeftovers(payload: unknown): unknown;
+  snapshotsSave(payload: unknown): unknown;
+  snapshotsList(payload: unknown): unknown;
+  snapshotsDiff(payload: unknown): unknown;
+  monitorStart(payload: unknown): void;
+  monitorStop(): void;
+  exportScan(payload: unknown): unknown;
+  engineOpenDb(path: string): void;
+  engineSetSetting(key: string, valueJson: string): void;
+  engineGetSetting(key: string): unknown;
+  engineRecentScans(limit: number): unknown;
 }
 
 const CANDIDATES = [

@@ -429,6 +429,14 @@ export const ScanErrorBatchSchema = z.object({
   errors: z.lazy(() => z.array(PathErrorSchema)),
 });
 
+export const ScanHistoryPageSchema = z.object({
+  records: z.lazy(() => z.array(ScanRecordDtoSchema)),
+});
+
+export const ScanHistoryQuerySchema = z.object({
+  limit: z.number(),
+});
+
 export const ScanNodesSchema = z.object({
   scanId: z.lazy(() => ScanIdSchema),
   deltas: z.lazy(() => z.array(NodeDeltaSchema)),
@@ -455,6 +463,16 @@ export const ScanProgressSchema = z.object({
   currentPath: z.string(),
   elapsedMs: z.bigint(),
   rateFilesPerSec: z.number(),
+});
+
+export const ScanRecordDtoSchema = z.object({
+  startedAt: z.bigint(),
+  target: z.string(),
+  strategy: z.string(),
+  files: z.bigint(),
+  folders: z.bigint(),
+  bytes: z.bigint(),
+  durationMs: z.bigint(),
 });
 
 export const ScanStartQuerySchema = z.object({

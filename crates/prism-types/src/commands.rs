@@ -258,6 +258,13 @@ pub const COMMANDS: &[CommandSpec] = &[
         res: "EntitlementGrants",
         premium: None,
     },
+    // 3.9 engine-internal (main bridge surface; free — history only)
+    CommandSpec {
+        cmd: "engine:recent-scans",
+        req: "ScanHistoryQuery",
+        res: "ScanHistoryPage",
+        premium: None,
+    },
 ];
 
 /// Helper DTOs referenced only by the table above live here so the emitter
@@ -768,4 +775,40 @@ pub struct VerifyTokenQuery {
     pub token_b64: String,
     /// Feature being requested.
     pub feature: crate::licensing::PremiumFeature,
+}
+
+/// `engine:recent-scans` request.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanHistoryQuery {
+    /// Max rows (1..=50).
+    pub limit: u32,
+}
+
+/// One scans-history row.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanRecordDto {
+    /// Started at (unix ms).
+    pub started_at: i64,
+    /// Root path.
+    pub target: String,
+    /// Strategy used.
+    pub strategy: String,
+    /// Total files.
+    pub files: u64,
+    /// Total folders.
+    pub folders: u64,
+    /// Total bytes.
+    pub bytes: u64,
+    /// Wall duration ms.
+    pub duration_ms: i64,
+}
+
+/// `engine:recent-scans` response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanHistoryPage {
+    /// Newest first.
+    pub records: Vec<ScanRecordDto>,
 }

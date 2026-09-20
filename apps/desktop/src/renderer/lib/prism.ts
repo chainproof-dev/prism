@@ -11,6 +11,7 @@ import type {
   EngineEvent,
   NodeDetail,
   NodeRowsPage,
+  PreflightInfo as PreflightInfoT,
   TypesPage,
   VolumeInfo,
 } from '@prism/shared/generated';
@@ -99,3 +100,120 @@ export function onEngineEvents(handler: (ev: EngineEvent) => void): () => void {
 }
 
 export { type IpcError, type CommandName, type CommandsMap };
+
+// ---- extension surface (docs/05 § 3.3–3.7) --------------------------------
+
+type GenPresetHit = import('@prism/shared/generated').PresetHit;
+type GenAppRow = import('@prism/shared/generated').AppRow;
+type GenSnapshotInfo = import('@prism/shared/generated').SnapshotInfo;
+
+export async function preflight(target: string): Promise<PreflightInfoT> {
+  return client.invoke('sys:preflight', { target });
+}
+
+export async function rescanSubtree(scanId: number, nodeId: number): Promise<number> {
+  const res = await client.invoke('scan:rescan-subtree', {
+    scanId, nodeId,
+    options: { followReparse: false, sizeMode: 'allocated', treatPackagesAsNodes: false, excludePatterns: [] },
+  });
+  return res.scanId;
+}
+
+export async function resolvePath(scanId: number, path: string): Promise<number | null> {
+  const res = await client.invoke('node:resolve-path', { scanId, path });
+  return res.nodeId ?? null;
+}
+
+export async function colorMapping(
+  scanId: number,
+  mode: 'type' | 'branch' | 'age',
+): Promise<import('@prism/shared/generated').ColorMapping> {
+  return client.invoke('viz:color-mapping', { scanId, mode });
+}
+
+export async function setTypeColor(key: string, color: string): Promise<void> {
+  await client.invoke('types:set-color', { key, color });
+}
+
+export type { DuplicateGroup } from '@prism/shared/generated';
+export async function dupesRun(scanId: number, minSize = 1024n): Promise<number> {
+  const res = await client.invoke('duplicates:run', { scanId, minSize, ioCapBps: 0n });
+  return res.runId;
+}
+export async function dupesCancel(scanId: number): Promise<void> {
+  await client.invoke('duplicates:cancel', { scanId });
+}
+export async function dupesGroups(
+  runId: number,
+  offset = 0,
+  limit = 50,
+): Promise<import('@prism/shared/generated').DupesGroupsPage> {
+  return client.invoke('duplicates:groups', { runId, offset, limit });
+}
+
+export async function presetsScan(
+  scanId: number,
+): Promise<GenPresetHit[]> {
+  const page = await client.invoke('cleanup:presets-scan', { scanId });
+  return page.hits;
+}
+
+export async function appsList(
+  includeSystem: boolean,
+): Promise<GenAppRow[]> {
+  const page = await client.invoke('apps:list', { includeSystem });
+  return page.apps;
+}
+export async function appFootprint(token: string): Promise<import('@prism/shared/generated').AppFootprint> {
+  return client.invoke('apps:footprint', { token });
+}
+export async function leftovers(
+  scanId: number,
+): Promise<GenAppRow[]> {
+  const page = await client.invoke('apps:leftovers', { scanId });
+  return page.apps;
+}
+
+export type { SnapshotInfo, SnapshotDelta } from '@prism/shared/generated';
+export async function snapshotsSave(scanId: number, depth = 6): Promise<GenSnapshotInfo> {
+  return client.invoke('snapshots:save', { scanId, depth });
+}
+export async function snapshotsList(root = ''): Promise<GenSnapshotInfo[]> {
+  const page = await client.invoke('snapshots:list', { root });
+  return page.snapshots;
+}
+export async function snapshotsDiff(
+  before: number,
+  after: number,
+  floorBytes = 10 * 1024 * 1024,
+): Promise<import('@prism/shared/generated').SnapshotDiffPage> {
+  return client.invoke('snapshots:diff', {
+    before,
+    after,
+    floorBytes: BigInt(floorBytes),
+  });
+}
+
+export type { ProcessSample, MonitorSample } from '@prism/shared/generated';
+export async function monitorStart(periodMs = 1000): Promise<void> {
+  await client.invoke('monitor:start', { periodMs });
+}
+export async function monitorStop(): Promise<void> {
+  await client.invoke('monitor:stop', null as never);
+}
+
+export async function exportScan(
+  scanId: number,
+  format: 'csv' | 'ndjson',
+  scope: 'full' | 'selection' | 'filtered',
+): Promise<import('@prism/shared/generated').ExportResult> {
+  return client.invoke('export:scan', { scanId, format, scope, dest: '' });
+}
+
+
+export async function recentScans(
+  limit = 6,
+): Promise<import('@prism/shared/generated').ScanRecordDto[]> {
+  const page = await client.invoke('engine:recent-scans', { limit });
+  return page.records;
+}

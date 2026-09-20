@@ -16,10 +16,25 @@ export type IpcError =
 /** Response envelope. */
 export type IpcResponse<T> = { ok: true; data: T } | { ok: false; error: IpcError };
 
+/** License state mirror (tokens never cross the bridge, PRISM-IPC-054). */
+export interface LicenseMirror {
+  state:
+    | { phase: 'unlicensed' }
+    | { phase: 'trial'; startedAt: number; endsAt: number }
+    | { phase: 'licensed'; sku: string; exp: number; lastValidatedAt: number }
+    | { phase: 'grace'; sku: string; exp: number }
+    | { phase: 'expired' };
+  daysLeft: number | null;
+}
+
 /** The preload-exposed surface (contextBridge, docs/04 ADR-02). */
 export interface PrismBridge {
   invoke(cmd: string, payload: unknown): Promise<unknown>;
   onEvents(handler: (batch: EngineEvent[]) => void): () => void;
+  license?(op: string, arg?: unknown): Promise<unknown>;
+  onLicense?(handler: (mirror: LicenseMirror) => void): () => void;
+  settings?(op: string, arg?: unknown): Promise<unknown>;
+  onMenu?(handler: (cmd: string) => void): () => void;
   platform: 'windows' | 'linux' | 'darwin';
   engineVersion: string;
 }

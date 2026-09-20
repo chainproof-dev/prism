@@ -2,17 +2,27 @@
 // schemas, routes to engine functions, normalizes errors into the
 // discriminated IpcError envelope (PRISM-IPC-003/050).
 
+import { dialog } from 'electron';
 import type { EngineModule } from './loader';
 import type { IpcResponse } from '@prism/shared/client';
 import * as Schemas from '@prism/shared/generated';
 
 // T1 request validation with the GENERATED zod schemas (PRISM-IPC-050).
-// Schema names are generated from Rust — drift is a codegen break, not a
-// runtime surprise.
 const REQUEST_VALIDATORS: Record<string, (v: unknown) => { ok: true } | { ok: false; detail: string }> = {
   'scan:start': (v) => validate(Schemas.ScanStartQuerySchema, v),
   'tree:children': (v) => validate(Schemas.ChildrenQuerySchema, v),
   'viz:layout': (v) => validate(Schemas.VizLayoutQuerySchema, v),
+  'sys:preflight': (v) => validate(Schemas.PreflightQuerySchema, v),
+  'node:resolve-path': (v) => validate(Schemas.ResolvePathQuerySchema, v),
+  'duplicates:run': (v) => validate(Schemas.DupesRunQuerySchema, v),
+  'cleanup:stage': (v) => validate(Schemas.StageQuerySchema, v),
+  'cleanup:unstage': (v) => validate(Schemas.UnstageQuerySchema, v),
+  'cleanup:execute': (v) => validate(Schemas.ExecuteQuerySchema, v),
+  'apps:list': (v) => validate(Schemas.AppsQuerySchema, v),
+  'apps:footprint': (v) => validate(Schemas.AppFootprintQuerySchema, v),
+  'snapshots:save': (v) => validate(Schemas.SnapshotSaveQuerySchema, v),
+  'snapshots:diff': (v) => validate(Schemas.SnapshotDiffQuerySchema, v),
+  'monitor:start': (v) => validate(Schemas.MonitorQuerySchema, v),
 };
 
 function validate(schema: { safeParse: (v: unknown) => { success: boolean; error?: { issues: { path: (string | number | symbol)[]; message: string }[] } } }, v: unknown): { ok: true } | { ok: false; detail: string } {
@@ -31,7 +41,7 @@ export interface CommandRouterDeps {
   };
 }
 
-type Handler = (payload: unknown, deps: CommandRouterDeps) => unknown | Promise<unknown>;
+type Handler = (payload: unknown, deps: CommandRouterDeps, win: Electron.BrowserWindow | null) => unknown | Promise<unknown>;
 
 function ok<T>(data: T): IpcResponse<T> {
   return { ok: true, data };
@@ -54,21 +64,81 @@ function parseEngineError(e: unknown): { ok: false; error: unknown } {
   return fail('engine', { msg, internal: null });
 }
 
+const sid = (p: unknown): number => (p as { scanId: number }).scanId;
+
 /** The command table: cmd string → handler (mirrors the generated CommandsMap). */
 export const handlers: Record<string, Handler> = {
+  // 3.1 lifecycle & system
   'sys:hello': (_p, { engine }) => engine.sysHello(),
   'sys:volumes': (_p, { engine }) => engine.sysVolumes(),
+  'sys:preflight': (p, { engine }) => engine.sysPreflight(p),
+  // 3.2 scanning
   'scan:start': (p, { engine }) => engine.scanStart(p),
-  'scan:pause': (p, { engine }) => engine.scanPause((p as { scanId: number }).scanId),
-  'scan:resume': (p, { engine }) => engine.scanResume((p as { scanId: number }).scanId),
-  'scan:cancel': (p, { engine }) => engine.scanCancel((p as { scanId: number }).scanId),
-  'scan:summary': (p, { engine }) => engine.scanSummary((p as { scanId: number }).scanId),
+  'scan:pause': (p, { engine }) => engine.scanPause(sid(p)),
+  'scan:resume': (p, { engine }) => engine.scanResume(sid(p)),
+  'scan:cancel': (p, { engine }) => engine.scanCancel(sid(p)),
+  'scan:summary': (p, { engine }) => engine.scanSummary(sid(p)),
+  'scan:rescan-subtree': (p, { engine }) => engine.scanRescanSubtree(p),
+  'scan:reattach': (p, { engine }) => engine.scanReattach(sid(p)),
+  // 3.3 tree & nodes
   'tree:children': (p, { engine }) => engine.treeChildren(p),
-  'node:detail': (p, { engine }) => engine.nodeDetail((p as { scanId: number }).scanId, (p as { nodeId: number }).nodeId),
-  'tree:expand-stats': (p, { engine }) => engine.treeExpandStats((p as { scanId: number }).scanId, (p as { nodeId: number }).nodeId),
+  'tree:expand-stats': (p, { engine }) => engine.treeExpandStats(sid(p), (p as { nodeId: number }).nodeId),
+  'node:detail': (p, { engine }) => engine.nodeDetail(sid(p), (p as { nodeId: number }).nodeId),
+  'node:resolve-path': (p, { engine }) => engine.nodeResolvePath(p),
+  // 3.4 viz + types
   'viz:layout': (p, { engine }) => engine.vizLayout(p),
-  'types:list': (p, { engine }) => engine.typesList((p as { scanId: number }).scanId, (p as { sort: string }).sort, (p as { dir: string }).dir),
-  'filter:apply': (p, { engine }) => engine.filterApply((p as { scanId: number }).scanId, (p as { name: string }).name, (p as { kind: string }).kind ?? 'both'),
+  'viz:color-mapping': (p, { engine }) => engine.vizColorMapping(p),
+  'types:list': (p, { engine }) => engine.typesList(sid(p), (p as { sort: string }).sort, (p as { dir: string }).dir),
+  'types:set-color': (p, { engine }) => engine.typesSetColor(p),
+  'filter:apply': (p, { engine }) => engine.filterApply(sid(p), (p as { name: string }).name, (p as { kind: string }).kind ?? 'both'),
+  'filter:clear': () => null, // filter state is renderer-owned (docs/05 § 3.5)
+  // 3.6 duplicates (premium — engine gates at the boundary)
+  'duplicates:run': (p, { engine }) => engine.duplicatesRun(p),
+  'duplicates:cancel': (p, { engine }) => engine.duplicatesCancel(sid(p)),
+  'duplicates:groups': (p, { engine }) => engine.duplicatesGroups(p),
+  // 3.7 cleanup ledger
+  'cleanup:presets-scan': (p, { engine }) => engine.cleanupPresetsScan(sid(p)),
+  'cleanup:stage': (p, { engine }) => engine.cleanupStage(p),
+  'cleanup:unstage': (p, { engine }) => engine.cleanupUnstage(p),
+  'cleanup:queue': (_p, { engine }) => engine.cleanupQueue(),
+  'cleanup:execute': (p, { engine }) => engine.cleanupExecute(p),
+  // applications
+  'apps:list': (p, { engine }) => engine.appsList(p),
+  'apps:footprint': (p, { engine }) => engine.appsFootprint(p),
+  'apps:leftovers': (p, { engine }) => engine.appsLeftovers(p),
+  // snapshots
+  'snapshots:save': (p, { engine }) => engine.snapshotsSave(p),
+  'snapshots:list': (p, { engine }) => engine.snapshotsList(p),
+  'snapshots:diff': (p, { engine }) => engine.snapshotsDiff(p),
+  // monitor
+  'monitor:start': (p, { engine }) => engine.monitorStart(p),
+  'monitor:stop': (_p, { engine }) => engine.monitorStop(),
+  // export (save dialog resolved main-side; the wire payload's dest field is
+  // ignored — the renderer passes a hint, we substitute the chosen path)
+  'export:scan': async (p, { engine }, win) => {
+    const q = p as { format: string; scope: string; dest?: string; scanId: number };
+    const ext = q.format === 'ndjson' ? 'ndjson' : 'csv';
+    const defaultName = `prism-scan-${new Date().toISOString().slice(0, 10)}.${ext}`;
+    if (!win) {
+      return fail('invalid-args', { detail: 'no window for the save dialog' });
+    }
+    const chosen = await dialog.showSaveDialog(win, {
+      defaultPath: q.dest ?? defaultName,
+      filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+    });
+    if (chosen.canceled || !chosen.filePath) {
+      return fail('cancelled', {});
+    }
+    return engine.exportScan({ ...q, dest: chosen.filePath });
+  },
+  // engine-internal
+  'engine:recent-scans': (p, { engine }) => engine.engineRecentScans(((p as { limit: number }).limit ?? 6) as number),
+  // licensing (main-only bridge, never exposed to the renderer directly)
+  'lic:verify-token': (p, { engine, license }, _win) => {
+    const { token: tok, feature } = p as { token: string; feature: string };
+    void license; // the engine verifies; the router deps' client supplied it
+    return engine.licVerifyToken(tok, feature);
+  },
 };
 
 /** Dispatch one command; always resolves to the response envelope. */
@@ -76,6 +146,7 @@ export async function dispatch(
   cmd: string,
   payload: unknown,
   deps: CommandRouterDeps,
+  win: Electron.BrowserWindow | null = null,
 ): Promise<IpcResponse<unknown> | { ok: false; error: unknown }> {
   const handler = handlers[cmd];
   if (!handler) {
@@ -89,8 +160,9 @@ export async function dispatch(
     }
   }
   try {
-    return ok(await handler(payload, deps));
+    return ok(await handler(payload, deps, win));
   } catch (e) {
     return parseEngineError(e);
   }
 }
+

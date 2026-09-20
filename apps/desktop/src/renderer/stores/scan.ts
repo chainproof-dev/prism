@@ -29,6 +29,7 @@ interface ScanState {
   summary: ScanSummary | null;
   selectedNode: number | null;
   hoveredNode: number | null;
+  errors: { path: string; reason: string }[];
   // actions
   loadVolumes: () => Promise<void>;
   beginScan: (target: { kind: 'volume'; path: string } | { kind: 'folder'; paths: string[] }) => Promise<void>;
@@ -48,6 +49,7 @@ export const useScanStore = create<ScanState>((set, get) => ({
   summary: null,
   selectedNode: null,
   hoveredNode: null,
+  errors: [],
 
   loadVolumes: async () => {
     const hello = await api.hello();
@@ -56,7 +58,7 @@ export const useScanStore = create<ScanState>((set, get) => ({
 
   beginScan: async (target) => {
     const scanId = await api.startScan(target);
-    set({ scanId, screen: 'scanning', phase: 'walking', liveTree: new Map(), progress: null, summary: null, selectedNode: null });
+    set({ scanId, screen: 'scanning', phase: 'walking', liveTree: new Map(), progress: null, summary: null, selectedNode: null, errors: [] });
   },
 
   handleEvent: (ev) => {
@@ -80,9 +82,15 @@ export const useScanStore = create<ScanState>((set, get) => ({
       case 'scan-done':
         set({ summary: ev.done.summary, screen: 'explore', phase: 'done' });
         break;
-      case 'scan-error-batch':
-        // errors drawer data lands with the drawer UI (P3-008)
+      case 'scan-error-batch': {
+        // errors drawer data (P3-008, docs/10 § 11)
+        const errs = state.errors;
+        for (const e of ev.errors.errors) {
+          errs.push({ path: e.path, reason: e.message || `error ${e.code}` });
+        }
+        set({ errors: errs.slice(-2000) });
         break;
+      }
       default:
         break;
     }
