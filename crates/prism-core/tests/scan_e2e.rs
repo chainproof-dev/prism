@@ -53,6 +53,18 @@ fn scan_completes_with_correct_totals() {
     let target_path = dir.path().to_string_lossy().into_owned();
     let completed = run_scan(target_path, ScanOptions::default());
 
+    // Diagnostics first: on failure, surface every recorded walk error
+    // (path + code + message) so CI logs are self-explanatory.
+    if completed.summary.files == 0 || !completed.errors.is_empty() {
+        eprintln!("SCAN DIAGNOSTICS — root walk errors:");
+        for e in &completed.errors {
+            eprintln!(
+                "  error {} ({:#x}) at {:?}: {}",
+                e.code, e.code as u32, e.path, e.message
+            );
+        }
+    }
+
     // Summary sanity: 5 files, >=3 dirs, 73_000 logical bytes
     assert_eq!(completed.summary.files, 4, "files: {:?}", completed.summary);
     assert!(
