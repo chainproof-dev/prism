@@ -17,10 +17,17 @@ fn schedule_trigger_wire_is_camel() {
         time_min: 600,
     };
     let jw = serde_json::to_string(&w).unwrap();
-    assert!(jw.contains("\"timeMin\"") && jw.contains("\"days\""), "{jw}");
+    assert!(
+        jw.contains("\"timeMin\"") && jw.contains("\"days\""),
+        "{jw}"
+    );
     let l = ScheduleTrigger::AtLogon {};
-    assert_eq!(serde_json::to_string(&l).unwrap(), "{\"kind\":\"at-logon\"}");
+    assert_eq!(
+        serde_json::to_string(&l).unwrap(),
+        "{\"kind\":\"at-logon\"}"
+    );
     // Round trip through the exact zod-validated shape.
-    let parsed: ScheduleTrigger = serde_json::from_str("{\"kind\":\"daily\",\"timeMin\":540}").unwrap();
+    let parsed: ScheduleTrigger =
+        serde_json::from_str("{\"kind\":\"daily\",\"timeMin\":540}").unwrap();
     assert_eq!(parsed, t);
 }

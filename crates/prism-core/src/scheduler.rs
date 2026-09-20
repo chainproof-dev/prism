@@ -294,17 +294,13 @@ fn register_task(spec: &ScheduleSpec, runner_exe: &str) -> Result<(), EngineErro
     let out = std::process::Command::new("schtasks.exe")
         .args(schtasks_create_args(spec, runner_exe))
         .output()
-        .map_err(|e| EngineError::Internal {
-            msg: format!("schtasks spawn: {e}"),
-        })?;
+        .map_err(|e| EngineError::Internal(format!("schtasks spawn: {e}")))?;
     if !out.status.success() {
-        return Err(EngineError::Internal {
-            msg: format!(
-                "schtasks create failed ({}): {}",
-                out.status,
-                String::from_utf8_lossy(&out.stderr).trim()
-            ),
-        });
+        return Err(EngineError::Internal(format!(
+            "schtasks create failed ({}): {}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
     }
     Ok(())
 }
@@ -314,18 +310,14 @@ fn unregister_task(id: &str) -> Result<(), EngineError> {
     let out = std::process::Command::new("schtasks.exe")
         .args(["/Delete", "/F", "/TN", &format!("{TASK_PREFIX}{id}")])
         .output()
-        .map_err(|e| EngineError::Internal {
-            msg: format!("schtasks spawn: {e}"),
-        })?;
+        .map_err(|e| EngineError::Internal(format!("schtasks spawn: {e}")))?;
     // Deleting a missing task is success for our idempotency contract.
     if !out.status.success() && !String::from_utf8_lossy(&out.stderr).contains("cannot find") {
-        return Err(EngineError::Internal {
-            msg: format!(
-                "schtasks delete failed ({}): {}",
-                out.status,
-                String::from_utf8_lossy(&out.stderr).trim()
-            ),
-        });
+        return Err(EngineError::Internal(format!(
+            "schtasks delete failed ({}): {}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
     }
     Ok(())
 }
@@ -350,10 +342,13 @@ pub fn utc_offset_minutes() -> i32 {
     #[cfg(windows)]
     {
         unsafe {
-            use windows_sys::Win32::System::Time::{
-                GetTimeZoneInformation, TIME_ZONE_ID_DAYLIGHT, TIME_ZONE_ID_STANDARD,
-                TIME_ZONE_INFORMATION,
+            // GetTimeZoneInformation lives in Win32::System::Time; the
+            // TIME_ZONE_ID_* result codes live in Win32::System::SystemServices
+            // (windows-sys 0.61 module layout).
+            use windows_sys::Win32::System::SystemServices::{
+                TIME_ZONE_ID_DAYLIGHT, TIME_ZONE_ID_STANDARD,
             };
+            use windows_sys::Win32::System::Time::{GetTimeZoneInformation, TIME_ZONE_INFORMATION};
             let mut tzi: TIME_ZONE_INFORMATION = std::mem::zeroed();
             let rc = GetTimeZoneInformation(&mut tzi);
             // Win32 bias: UTC = local + Bias → local offset = -Bias.
