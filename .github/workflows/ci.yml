@@ -185,7 +185,7 @@ jobs:
       - run: node script/copy-engine.mjs
       - run: pnpm --filter desktop build
       - run: pnpm --filter desktop typecheck
-      - name: screenshot harness (win32 backend + real C: volumes)
+      - name: screenshot harness (win32 backend, real C drive volumes)
         shell: pwsh
         run: |
           $env:PLAYWRIGHT_BROWSERS_PATH="0"
