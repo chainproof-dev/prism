@@ -138,3 +138,44 @@ Next:
 1. CI run 35520350144 (11 jobs) to full green — expected windows-rust PASS now.
 2. Download CI artifacts (prism_core.dll windows-x64, staged electron bundle) for the user-testable ZIP.
 3. Final full-workspace ZIP with builds.
+
+### Session 4 final — Windows-native scanner CI-VALIDATED (11/11 green)
+
+The windows-latest CI run 35522996727 @ c6fa073 is fully green across all
+11 jobs. Getting there surfaced SEVEN real defects in the never-executed
+cfg(windows) scanner — every single one found by a real machine, each
+pinned by a permanent regression gate:
+
+1. open_dir emitted only the `\??\` prefix, never appending the target
+   path (every scan root opened the 4-char path `\??\` → NAME_INVALID).
+   → scanner/nt_path pure module (platform-independent, 10 unit tests,
+   runs on Linux CI — the never-emits-prefix-without-path guard).
+2. FileIdExtdDirectoryInformation ordinal 19 → 60 (INVALID_INFO_CLASS).
+3. Phantom file_name_len in the Extd struct — the class has NO length
+   field (NUL-terminated names).
+4. `size_of - 2` name-offset arithmetic ignoring repr(C) tail padding →
+   fixed-header views + compile-time ABI asserts.
+5. NO_MORE_FILES tested BEFORE parsing the buffer — entries and
+   exhaustion arrive in the same call; the final batch of every directory
+   was silently dropped (small dirs = 0 files / 0 errors).
+6. FILE_ID_128 is 8-byte aligned in the kernel layout (union with
+   ULONGLONG) — FileId at 72..88, FileName at 88 (machine-verified:
+   name@84="", name@88="."); any-name-parity check auto-downgrades to
+   class 1 on ABI drift so a wrong guess can never misparse silently.
+7. The FINAL record of a batch is neither padded nor NUL-terminated —
+   full-struct bounds checks rejected short trailing records (".."
+   records are 92–94 bytes) as unparseable.
+
+Plus CI-side: Node requires `.node`-named addons (raw `.dll` require was
+parsed as JavaScript).
+
+Evidence: windows-latest cargo test green incl. scan_e2e 5/5 on real NTFS
+through the real NT path; probe (win32_nt_probe) asserts open + full
+enumeration + Extd survival; 81 linux tests; clippy clean on host AND
+windows target; fmt clean; codegen in sync; artifacts uploaded
+(prism_core.dll MSVC x64 + complete staged runnable Electron app +
+screenshots) — downloaded to download/prism-artifacts/ with a README.
+
+Remaining (honest): 66 parity-row QA sign-offs need interactive Windows
+sessions; turbo ≥1M/s needs a physical NTFS volume; NSIS install matrix;
+signing execution needs certs; Dodo checkout needs provider credentials.
