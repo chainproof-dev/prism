@@ -30,3 +30,7 @@ Thumbs.db
 coverage/
 .playwright-report/
 test-results/
+
+# Screenshot harness outputs (baselines are committed; shots are per-run)
+qa/screenshots/shots/
+qa/screenshots/*.diff.png

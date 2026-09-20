@@ -13,3 +13,5 @@ onlyBuiltDependencies:
   - esbuild
   - electron
   - '@napi-rs/cli'
+
+verifyDepsBeforeRun: false

@@ -16,7 +16,8 @@ use prism_types::commands::{
     AppFootprintQuery, AppsQuery, ColorMappingQuery, DupesGroupsPage, DupesGroupsQuery,
     DupesRunInfo, DupesRunQuery, ExecuteQuery, ExportQuery, MonitorQuery, PreflightQuery,
     PresetHit, PresetHitsPage, QueuePage, RescanQuery, ResolvePathQuery, ResolveResult,
-    ScanControlQuery, SnapshotDiffQuery, SnapshotInfo, SnapshotSaveQuery, SnapshotsPage,
+    ScanControlQuery, SchedulerDeleteQuery, SchedulerDigestQuery, SchedulerListQuery,
+    SchedulerUpsertQuery, SnapshotDiffQuery, SnapshotInfo, SnapshotSaveQuery, SnapshotsPage,
     SnapshotsQuery, StageQuery, StagedTotals, TypeColorQuery, UnstageQuery,
 };
 use prism_types::events::EngineEvent;
@@ -609,6 +610,63 @@ pub fn apps_leftovers(payload: Value) -> Result<Value> {
         require_feature(&st, "apps")?;
         let scan = st.scans.completed(q.scan_id).map_err(ne)?;
         to_json(apps::leftovers(&scan.arena, &scan.summary.root))
+    })
+}
+
+// ---------------------------------------------------------------------------
+// scheduler (PRISM-HG-080)
+// ---------------------------------------------------------------------------
+
+#[napi]
+/// `scheduler:list` — all schedules + which backend is live.
+pub fn scheduler_list(payload: Value) -> Result<Value> {
+    contain(|| {
+        let _q: SchedulerListQuery = parse_payload(payload)?;
+        let st = state()?;
+        require_feature(&st, "scheduler")?;
+        let db = db_of(&st)?;
+        to_json(crate::scheduler::list(db.as_ref()))
+    })
+}
+
+#[napi]
+/// `scheduler:upsert` — create/update one schedule. The task action is
+/// constructed engine-side from runner_exe + target only (no arbitrary
+/// command lines can be scheduled; PRISM-HG-080 scope guard).
+pub fn scheduler_upsert(payload: Value) -> Result<Value> {
+    contain(|| {
+        let q: SchedulerUpsertQuery = parse_payload(payload)?;
+        let st = state()?;
+        require_feature(&st, "scheduler")?;
+        let db = db_of(&st)?;
+        let spec = crate::scheduler::upsert(db.as_ref(), &q.spec, &q.runner_exe).map_err(ne)?;
+        to_json(spec)
+    })
+}
+
+#[napi]
+/// `scheduler:delete`
+pub fn scheduler_delete(payload: Value) -> Result<()> {
+    contain(|| {
+        let q: SchedulerDeleteQuery = parse_payload(payload)?;
+        let st = state()?;
+        require_feature(&st, "scheduler")?;
+        let db = db_of(&st)?;
+        crate::scheduler::delete(db.as_ref(), &q.id).map_err(ne)?;
+        Ok(())
+    })
+}
+
+#[napi]
+/// `scheduler:digest` — what changed since the previous capture.
+pub fn scheduler_digest(payload: Value) -> Result<Value> {
+    contain(|| {
+        let q: SchedulerDigestQuery = parse_payload(payload)?;
+        let st = state()?;
+        require_feature(&st, "scheduler")?;
+        let db = db_of(&st)?;
+        let d = crate::scheduler::digest(db.as_ref(), &q.target, q.limit).map_err(ne)?;
+        to_json(d)
     })
 }
 

@@ -1,9 +1,9 @@
 // Main process entry (docs/04, docs/14 § 3 hardening table).
-import { app, BrowserWindow, ipcMain, Menu, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, dialog, Notification } from 'electron';
 import { join } from 'node:path';
 import { loadEngine, type EngineModule } from './engine/loader';
 import { dispatch, type CommandRouterDeps } from './engine/router';
-import type { EngineEvent } from '@prism/shared/generated';
+import type { EngineEvent, ScanSummary } from '@prism/shared/generated';
 import * as licensing from './licensing/client';
 import { loadSettings, saveSettings, resetSection, loadWindowState, saveWindowState, type PrismSettings } from './settings';
 
@@ -11,6 +11,64 @@ let engine: EngineModule;
 let deps: CommandRouterDeps;
 let mainWin: BrowserWindow | null = null;
 let settings: PrismSettings;
+
+// --- background-scan boot mode (PRISM-HG-080) ------------------------------
+// Task Scheduler launches the exe with `--background-scan <path>`: run a
+// headless STANDARD scan, auto-capture a snapshot, toast the result, quit.
+// No window is ever created; failures land in the notification + log only.
+const bgArgIdx = process.argv.indexOf('--background-scan');
+const bgTargetArg = bgArgIdx >= 0 ? process.argv[bgArgIdx + 1] : undefined;
+const backgroundTarget: string | null = typeof bgTargetArg === 'string' && bgTargetArg.length > 0 ? bgTargetArg : null;
+
+function fmtBytes(n: number): string {
+  if (n >= 1024 ** 4) return `${(n / 1024 ** 4).toFixed(1)} TB`;
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`;
+  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${n} B`;
+}
+
+async function runBackgroundScan(target: string): Promise<void> {
+  const started = engine.scanStart({
+    target: { kind: 'folder', paths: [target] },
+    strategy: 'standard',
+    options: { followReparse: false, sizeMode: 'allocated', treatPackagesAsNodes: true, excludePatterns: [] },
+  }) as { scanId: number };
+  const scanId = started.scanId;
+  await new Promise<void>((resolve) => {
+    const finish = (delayMs: number): void => {
+      setTimeout(() => resolve(), delayMs);
+    };
+    engine.engineAttachEventSink((batchJson: string) => {
+      const batch = JSON.parse(batchJson) as EngineEvent[];
+      for (const ev of batch) {
+        if (ev.ev === 'scan-done' && ev.done) {
+          const summary = (ev.done as { summary?: ScanSummary }).summary;
+          if (summary) {
+            try {
+              // Auto-capture (docs/12 § 9): scheduled scan → snapshot.
+              engine.snapshotsSave({ scanId, depth: 6 });
+              const title = 'Prism scheduled scan complete';
+              const body =
+                `${target} — ${summary.files.toLocaleString()} files, ` +
+                `${fmtBytes(Number(summary.allocated))}. Snapshot saved.`;
+              if (Notification.isSupported()) {
+                new Notification({ title, body }).show();
+              }
+            } catch {
+              // quiet failure to notifications (docs/12 § 9) — never loud UI
+            }
+          }
+          finish(1500); // let the toast surface before quit
+          return;
+        }
+      }
+    });
+    // Safety valve: never hang a scheduled task (20 min cap).
+    finish(20 * 60_000);
+  });
+  app.quit();
+}
 
 const license: CommandRouterDeps['license'] = {
   instanceId: () => licensing.instance(),
@@ -131,7 +189,7 @@ function buildMenu(): Menu {
   return Menu.buildFromTemplate(template);
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   try {
     engine = loadEngine();
   } catch (e) {
@@ -182,7 +240,7 @@ app.whenReady().then(() => {
   const origHeartbeatTimer = setInterval(broadcastLicense, 60_000);
   app.on('before-quit', () => clearInterval(origHeartbeatTimer));
 
-  // Settings surface (WDS-CFG-01/03)
+  // Settings surface (parity-CFG-01/03)
   ipcMain.handle('prism:settings', (_ev, op: string, arg: unknown) => {
     switch (op) {
       case 'get':
@@ -202,6 +260,11 @@ app.whenReady().then(() => {
   });
 
   Menu.setApplicationMenu(buildMenu());
+  if (backgroundTarget) {
+    // Headless boot: no window, no menu interaction — scan, snapshot, quit.
+    await runBackgroundScan(backgroundTarget);
+    return;
+  }
   createWindow();
   broadcastLicense();
   app.on('activate', () => {

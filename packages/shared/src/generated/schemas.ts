@@ -37,6 +37,8 @@ export const ScanStrategySchema = z.enum(['standard', 'turbo']);
 
 export const ScanTargetSchema = z.discriminatedUnion('kind', [z.object({ kind: z.literal('volume'), path: z.string() }), z.object({ kind: z.literal('folder'), paths: z.array(z.string()) }), z.object({ kind: z.literal('home') })]);
 
+export const ScheduleTriggerSchema = z.discriminatedUnion('kind', [z.object({ kind: z.literal('daily'), timeMin: z.number() }), z.object({ kind: z.literal('weekly'), days: z.array(z.number()), timeMin: z.number() }), z.object({ kind: z.literal('at-logon') })]);
+
 export const SizeModeSchema = z.enum(['logical', 'allocated', 'unique']);
 
 export const SkuSchema = z.enum(['yearly', 'lifetime']);
@@ -500,6 +502,45 @@ export const ScanSummarySchema = z.object({
   durationMs: z.bigint(),
   errors: z.number(),
   truncated: z.boolean(),
+});
+
+export const ScheduleDigestSchema = z.object({
+  target: z.string(),
+  beforeMs: z.bigint(),
+  afterMs: z.bigint(),
+  bytesDelta: z.bigint(),
+  filesDelta: z.bigint(),
+  top: z.lazy(() => z.array(SnapshotDeltaSchema)),
+});
+
+export const ScheduleSpecSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  target: z.string(),
+  trigger: z.lazy(() => ScheduleTriggerSchema),
+  enabled: z.boolean(),
+  lastRunMs: z.bigint(),
+});
+
+export const SchedulerDeleteQuerySchema = z.object({
+  id: z.string(),
+});
+
+export const SchedulerDigestQuerySchema = z.object({
+  target: z.string(),
+  limit: z.number(),
+});
+
+export const SchedulerListQuerySchema = z.object({});
+
+export const SchedulerPageSchema = z.object({
+  schedules: z.lazy(() => z.array(ScheduleSpecSchema)),
+  backend: z.string(),
+});
+
+export const SchedulerUpsertQuerySchema = z.object({
+  spec: z.lazy(() => ScheduleSpecSchema),
+  runnerExe: z.string(),
 });
 
 export const SnapshotDeltaSchema = z.object({

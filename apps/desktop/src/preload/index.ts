@@ -26,7 +26,7 @@ contextBridge.exposeInMainWorld('prism', {
     ipcRenderer.on('prism:license', listener);
     return () => ipcRenderer.removeListener('prism:license', listener);
   },
-  // settings service (WDS-CFG-01)
+  // settings service (parity-CFG-01)
   settings: (op: string, arg?: unknown): Promise<unknown> => ipcRenderer.invoke('prism:settings', op, arg),
   // app menu → renderer commands (docs/10 § 14)
   onMenu: (handler: (cmd: string) => void): (() => void) => {

@@ -1,5 +1,5 @@
 // Cleanup system (docs/10 § 13 — the deletion contract):
-// ContextMenu (WDS-CTX-01 set) → stage → LedgerSheet (review) → execute
+// ContextMenu (parity-CTX-01 set) → stage → LedgerSheet (review) → execute
 // (fail-loud outcomes) → tree updates. ErrorsDrawer (docs/10 § 11).
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';

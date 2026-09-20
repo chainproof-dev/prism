@@ -23,6 +23,9 @@ const REQUEST_VALIDATORS: Record<string, (v: unknown) => { ok: true } | { ok: fa
   'snapshots:save': (v) => validate(Schemas.SnapshotSaveQuerySchema, v),
   'snapshots:diff': (v) => validate(Schemas.SnapshotDiffQuerySchema, v),
   'monitor:start': (v) => validate(Schemas.MonitorQuerySchema, v),
+  'scheduler:upsert': (v) => validate(Schemas.SchedulerUpsertQuerySchema, v),
+  'scheduler:delete': (v) => validate(Schemas.SchedulerDeleteQuerySchema, v),
+  'scheduler:digest': (v) => validate(Schemas.SchedulerDigestQuerySchema, v),
 };
 
 function validate(schema: { safeParse: (v: unknown) => { success: boolean; error?: { issues: { path: (string | number | symbol)[]; message: string }[] } } }, v: unknown): { ok: true } | { ok: false; detail: string } {
@@ -113,6 +116,15 @@ export const handlers: Record<string, Handler> = {
   // monitor
   'monitor:start': (p, { engine }) => engine.monitorStart(p),
   'monitor:stop': (_p, { engine }) => engine.monitorStop(),
+  // scheduler (PRISM-HG-080). The runner exe is substituted main-side —
+  // the renderer cannot point the task at an arbitrary binary.
+  'scheduler:list': (_p, { engine }) => engine.schedulerList({}),
+  'scheduler:upsert': (p, { engine }) => {
+    const q = p as { spec: unknown; runnerExe?: string };
+    return engine.schedulerUpsert({ spec: q.spec, runnerExe: process.execPath });
+  },
+  'scheduler:delete': (p, { engine }) => engine.schedulerDelete(p),
+  'scheduler:digest': (p, { engine }) => engine.schedulerDigest(p),
   // export (save dialog resolved main-side; the wire payload's dest field is
   // ignored — the renderer passes a hint, we substitute the chosen path)
   'export:scan': async (p, { engine }, win) => {

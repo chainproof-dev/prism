@@ -35,6 +35,10 @@ export type CommandName =
   | 'apps:list'
   | 'apps:footprint'
   | 'apps:leftovers'
+  | 'scheduler:list'
+  | 'scheduler:upsert'
+  | 'scheduler:delete'
+  | 'scheduler:digest'
   | 'snapshots:save'
   | 'snapshots:list'
   | 'snapshots:diff'
@@ -77,6 +81,10 @@ export interface CommandsMap {
   'apps:list': { req: P.AppsQuery; res: P.AppsPage };
   'apps:footprint': { req: P.AppFootprintQuery; res: P.AppFootprint };
   'apps:leftovers': { req: P.ScanControlQuery; res: P.AppsPage };
+  'scheduler:list': { req: P.SchedulerListQuery; res: P.SchedulerPage };
+  'scheduler:upsert': { req: P.SchedulerUpsertQuery; res: P.ScheduleSpec };
+  'scheduler:delete': { req: P.SchedulerDeleteQuery; res: void };
+  'scheduler:digest': { req: P.SchedulerDigestQuery; res: P.ScheduleDigest };
   'snapshots:save': { req: P.SnapshotSaveQuery; res: P.SnapshotInfo };
   'snapshots:list': { req: P.SnapshotsQuery; res: P.SnapshotsPage };
   'snapshots:diff': { req: P.SnapshotDiffQuery; res: P.SnapshotDiffPage };
@@ -121,6 +129,10 @@ export interface RequestSchemas {
   'apps:list': typeof S.AppsQuerySchema;
   'apps:footprint': typeof S.AppFootprintQuerySchema;
   'apps:leftovers': typeof S.ScanControlQuerySchema;
+  'scheduler:list': typeof S.SchedulerListQuerySchema;
+  'scheduler:upsert': typeof S.SchedulerUpsertQuerySchema;
+  'scheduler:delete': typeof S.SchedulerDeleteQuerySchema;
+  'scheduler:digest': typeof S.SchedulerDigestQuerySchema;
   'snapshots:save': typeof S.SnapshotSaveQuerySchema;
   'snapshots:list': typeof S.SnapshotsQuerySchema;
   'snapshots:diff': typeof S.SnapshotDiffQuerySchema;
@@ -139,6 +151,10 @@ export const PremiumCommands: Record<string, P.PremiumFeature> = {
   'apps:list': 'apps',
   'apps:footprint': 'apps',
   'apps:leftovers': 'apps',
+  'scheduler:list': 'scheduler',
+  'scheduler:upsert': 'scheduler',
+  'scheduler:delete': 'scheduler',
+  'scheduler:digest': 'scheduler',
   'snapshots:save': 'snapshots',
   'snapshots:list': 'snapshots',
   'snapshots:diff': 'snapshots',

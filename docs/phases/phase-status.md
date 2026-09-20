@@ -1,4 +1,4 @@
-# Phase status dashboard (Session 2 close)
+# Phase status dashboard (Session 3 close)
 
 > Honest state per the 18-PHASE-PLAN gates. Boxes are checked ONLY where a
 > command/test/build evidence line exists. Anything requiring a physical
@@ -18,8 +18,8 @@
 - [x] Persistence: SQLite migrations v1–v3 (scans/settings/snapshots/type_colors) — P1-006 closed
 - [x] Turbo scan wired end-to-end (ADR-06): MFT reader + arena builder + coordinator dispatch + entitlement gate; Windows compile validated
 - [x] Monitor (NtQuerySystemInformation + /proc dev), apps inventory (registry), cleanup execute (SHFileOperation), export (CSV/NDJSON), dupes pipeline runner
-- [ ] Throughput ≥150k files/s on R1 physical hardware — DEFERRED-WINDOWS (needs real NTFS volume; engine budget structure in place)
-- [ ] Criterion FIX-L bench suite — scaffold only (P1-010 partial)
+- [ ] Throughput ≥150k files/s on R1 physical hardware — **bench suite shipped (Session 3): 372k files/s measured on the CI container** (posix backend, warm cache); R1/NTFS number lands with the Windows CI run
+- [x] Criterion FIX-L bench suite (P1-010 closed, Session 3): arena push+attach, agg compute (200 Melem/s), all 6 canvas viz modes @ 20k+300k nodes, tree children-page @ 300k, real scan pipeline @ 10k on-disk files
 
 ## G2 — App shell & design system ✅ (Sessions 1+2)
 - [x] Token pipeline + 6 themes (OKLCH)
@@ -27,7 +27,7 @@
 - [x] Command palette (P2-006 closed) — cmdk, static + dynamic (recents, jump-biggest)
 - [x] Settings sheet (P3-009 partial → closed) + About (menu dialog)
 - [x] i18n mechanism (PRISM-HG-120): en-US + de-DE + pseudo-loc harness
-- [ ] Visual-regression baselines (P2-007 screenshot harness) — DEFERRED-WINDOWS (needs headed Electron; component states are specified)
+- [x] Visual-regression harness (P2-007 closed, Session 3): Playwright harness boots the real app (real engine + real scan), captures welcome/settings/scanning/explore; pixelmatch compare vs committed Linux baselines; wired into CI (ubuntu xvfb + windows job, artifacts uploaded)
 
 ## G3 — Parity spine ✅ (Sessions 1+2)
 - [x] Welcome → Scanning → Explore; tree + treemap + types + selection sync + inspector
@@ -41,12 +41,12 @@
 - [x] All screen states exist with honest empty/error states
 - [x] Type colors: engine db-backed overrides + `types:set-color`
 - [x] Drag-out/copy path (context menu); extension editing via settings
-- [ ] `npm run qa:parity` dashboard — the matrix lives in docs/03; row-by-row QA scripts + sign-offs REQUIRE a Windows host (WDS behavior references)
+- [ ] `npm run qa:parity` dashboard — **SHIPPED (Session 3): 71 rows rendered, 5 signed off (automated-test rows), 66 pending Windows QA sessions** — see docs/phases/parity-dashboard.md; row-by-row sign-offs REQUIRE a Windows host (WDS behavior references)
 
 ## G5 — Homegrown features ✅ (Session 2; per-feature QA pending Windows)
 - [x] Quick Wins (presets-scan ranked), Cleanup presets + full ledger, Stale (age buckets shared with ramp), Duplicates (full pipeline + staging), Snapshots + diff (10MB floor + PSNP1 share), Applications + Leftovers (registry-backed; honest empty off-Windows), Monitor, Turbo scan, Exports, Preview pane (honest no-handler state), Command palette
 - [x] Locked-tab previews (20% mask + conversion card, no fake data)
-- [ ] Scheduler (PRISM-HG-080) — NOT implemented (Task Scheduler registration is Windows-only; scope-guarded per docs/12 § 9) — DEFERRED-WINDOWS
+- [x] Scheduler (PRISM-HG-080) — **CLOSED (Session 3)**: engine scheduler module (spec validation, DB-backed store, Windows schtasks registration `PRISM\<id>`, honest dev-file backend off-Windows, next-run math with DST-aware UTC offset, digest from two newest snapshots), 4 IPC commands (list/upsert/delete/digest, entitlement-gated), main-process `--background-scan` headless boot mode (scan → auto-snapshot → notification → quit, 20-min safety valve), Settings → Scheduler UI (create/pause/resume/remove, locked state honestly shown when unlicensed). Scope guard pinned by tests: the ONLY schedulable action is a background standard scan — no scheduled cleanup, ever.
 - [ ] Turbo ≥1M files/s on R1 — DEFERRED-WINDOWS
 
 ## G6 — Licensing system ✅ (code complete; E2E vs live server on host)
@@ -62,13 +62,18 @@
 - Packaging: NSIS + portable config complete; installs need Windows runners
 - GA: blocked on the above by design (gate order is strict)
 
-## Test evidence (Session 2 close)
+## Test evidence (Session 3 close)
 | Suite | Result |
 |---|---|
-| cargo test --workspace | 61 green (47 core + 5 ntfs + 9 types) |
+| cargo test --workspace | 72 green (58 core incl. 10 scheduler + 5 ntfs + 9 types + wire pin) |
 | license-server vitest | 11 green |
 | shared vitest | 8 green |
 | cargo clippy --workspace --all-targets -D warnings | clean |
+| cargo fmt --all --check | clean |
 | cargo check --target x86_64-pc-windows-msvc (prism-types+ntfs+core) | green (zig cross-CC shim) |
+| cargo bench -p prism-benches | agg 200 Melem/s · scan 372k files/s (posix, warm) · 6 viz modes benched |
 | tsc (desktop, TS7 strict) | clean |
-| electron-vite build | 915 kB renderer |
+| electron-vite build | 926 kB renderer (≤8 MB budget) |
+| screenshot harness (xvfb) | 4 states captured through real app + engine + scan |
+| trace scanner / docs links / codegen drift | clean / clean / in sync |
+| parity dashboard | 71 rows · 5 signed off · 66 pending Windows QA |

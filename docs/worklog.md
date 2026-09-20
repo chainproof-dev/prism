@@ -93,3 +93,25 @@ Next:
 - Windows cross-check (msvc target): prism-types + prism-ntfs + **prism-core** GREEN (zig shim)
 - Desktop: typecheck clean (TS7 strict), build 915 kB renderer
 - Codegen drift: regenerated with engine:recent-scans — clean
+
+## Session 3 — scheduler + benches + parity dashboard + screenshot harness + CI/GitHub
+
+Agent: Super Z (main build agent)
+Tasks: last open worklog items (scheduler PRISM-HG-080, criterion FIX-L suite P1-010, parity dashboard, screenshot harness P2-007) + GitHub repo + windows/ubuntu CI.
+
+Done:
+- **Scheduler (PRISM-HG-080) — CLOSED**: `crates/prism-core/src/scheduler.rs` — spec validation (label ≤120, absolute target, time_min ≤1439, ISO weekday dedup+sort), engine-DB-backed spec store (`scheduler.specs`), Windows Task Scheduler mirroring via schtasks (`PRISM\<id>`, /SC DAILY|WEEKLY|ONLOGON, /D MON..SUN, /ST HH:MM), honest `dev-file` backend off-Windows, DST-aware next-run math (GetTimeZoneInformation + Hinnant civil-date algorithms), digest from the two newest snapshots (id DESC tiebreaker — found and fixed a same-ms ordering bug in list_snapshots). 4 IPC commands (`scheduler:list/upsert/delete/digest`, entitlement-gated at the dispatcher). Scope guard BY CONSTRUCTION + pinned by test: the only schedulable action is `"<runner_exe>" --background-scan "<target>"` — no scheduled cleanup can exist. Main: `--background-scan` headless boot (scan → auto-snapshot → Notification → quit; 20-min safety valve; runner_exe substituted main-side, renderer cannot point tasks at arbitrary binaries). Renderer: Settings → Scheduler section (list/add/pause/resume/remove, client-side next-run preview, locked state when unlicensed). Wire-format pin test: ScheduleTrigger tagged-kebab/camel round-trip vs generated zod (renamed_all_fields fix).
+- **Criterion FIX-L suite (P1-010) — CLOSED**: `prism-benches` — synth arena builder (fanout-8/depth-6, LCG sizes, bottom-up size rollup), bench-agg (203 Melem/s @120k), bench-viz (all 6 canvas modes @20k+300k), bench-tree (children-page @300k), bench-scan (**372k files/s real pipeline, 10k on-disk files, posix backend** — 2.5× the 150k/s budget, on a CI container). Release-lease fix: bench must call `manager.complete()` (the coordinator is single-active-scan).
+- **Parity QA dashboard**: `qa/parity-dashboard.mjs` parses docs/03 (71 WDS rows), merges `qa/parity-status.json` sign-offs, renders `docs/phases/parity-dashboard.md`; CI drift job. 5 rows signed off on automated evidence (CFG-01/03, PERF-01/03/04); 66 honestly pending Windows QA sessions.
+- **Screenshot harness (P2-007) — CLOSED**: `qa/screenshots/harness.cjs` (Playwright _electron, real app + real engine + real scan; license-gate → trial start; UI-driven via drive-card click — Welcome/Settings/Scanning/Explore) + `compare.cjs` (pixelmatch, 0.5% regression threshold, missing = new baseline). Fixed a REAL packaging bug found by the harness: `@prism/shared` (TS sources) was externalized in the built main — a packaged app could not boot (ERR_MODULE_NOT_FOUND). Now bundled via `externalizeDepsPlugin({ exclude: ['@prism/shared'] })`.
+- **CI matrix expanded**: windows-rust (fmt/clippy/tests/release build + .node smoke on the real win32 backend), windows-app (electron boot + screenshots, artifacts), screenshots (ubuntu xvfb, best-effort compare until runner font stacks stabilize), benches (informational), parity dashboard drift. Trace scanner violations fixed (6 files: WDS- ids in shipped code normalized to parity-*).
+
+Deferred:
+- R1/NTFS throughput numbers (150k/s standard, 1M/s turbo) — need the Windows CI run on real hardware (jobs pushed; results land in Actions).
+- Windows screenshot baselines — first windows-app run captures them; compare is best-effort until then.
+- Row-by-row parity sign-offs (66 rows) — Windows host QA sessions.
+
+Next:
+1. GitHub Actions: windows-rust + windows-app + screenshots + benches results (fix anything red).
+2. Windows QA sessions: parity rows + NSIS install matrix.
+3. Turbo bench on real NTFS volume.

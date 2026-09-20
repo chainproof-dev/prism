@@ -22,6 +22,7 @@ pub mod licensing;
 pub mod monitor;
 pub mod persistence;
 pub mod scanner;
+pub mod scheduler;
 pub mod sysinfo;
 pub mod viz;
 

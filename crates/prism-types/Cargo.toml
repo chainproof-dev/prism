@@ -28,5 +28,8 @@ syn = { version = "3", features = ["full", "derive", "parsing"], optional = true
 default = []
 emit = ["dep:syn"]
 
+[dev-dependencies]
+serde_json = { workspace = true }
+
 [lints]
 workspace = true

@@ -296,12 +296,12 @@ impl Db {
         let mut stmt = match if root.is_empty() {
             conn.prepare(
                 "SELECT id, root_path, created_at, depth, files, bytes FROM snapshots
-                 ORDER BY created_at DESC LIMIT 200",
+                 ORDER BY created_at DESC, id DESC LIMIT 200",
             )
         } else {
             conn.prepare(
                 "SELECT id, root_path, created_at, depth, files, bytes FROM snapshots
-                 WHERE root_path = ?1 ORDER BY created_at DESC LIMIT 200",
+                 WHERE root_path = ?1 ORDER BY created_at DESC, id DESC LIMIT 200",
             )
         } {
             Ok(s) => s,

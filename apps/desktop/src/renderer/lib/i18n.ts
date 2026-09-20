@@ -1,4 +1,4 @@
-// i18n (PRISM-HG-120, parity WDS-CHROME-07): ICU-shaped message ids with
+// i18n (PRISM-HG-120, parity parity-CHROME-07): ICU-shaped message ids with
 // {placeholders}; en-US complete + de-DE demonstrating the mechanism.
 // Pseudo-loc harness: set PRISM_PSEUDO=1 in dev to wrap every string (QA
 // catches hardcoded strings by inspection of the wrapped output).

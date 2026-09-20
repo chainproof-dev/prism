@@ -1,7 +1,9 @@
 name: CI
 
 # Gate chain (docs/17 § 3): fmt, clippy, test, lint, typecheck, vitest,
-# codegen drift, trace scan, docs links. All PR-blocking.
+# codegen drift, trace scan, docs links, parity dashboard drift, benches.
+# All PR-blocking. Screenshot regression runs on ubuntu (xvfb) and is
+# best-effort on the windows runner (baselines are GPU/driver-sensitive).
 
 on:
   push:
@@ -22,6 +24,24 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
+  windows-rust:
+    name: Windows (msvc · tests · engine smoke)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+        env:
+          CARGOFLAGS: --verbose
+      - run: cargo test --workspace --no-fail-fast
+      - run: cargo build --release -p prism-core
+      - name: engine napi smoke (real .node, win32 scanner live)
+        shell: pwsh
+        run: |
+          node -e "const e=require('./target/release/prism_core.dll'); e.engineInit(); console.log('engine', e.engineVersion(), 'OK')"
+
   codegen:
     name: TS codegen drift
     runs-on: ubuntu-latest
@@ -32,8 +52,19 @@ jobs:
       - run: cargo run -q -p prism-types --features emit --bin emit-ts -- --check packages/shared/src/generated/
       - run: git diff --exit-code -- packages/shared/src/generated/
 
+  parity:
+    name: Parity dashboard drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node qa/parity-dashboard.mjs
+      - run: git diff --exit-code -- docs/phases/parity-dashboard.md
+
   js:
-    name: JS (typecheck · lint · test)
+    name: JS (typecheck · test · build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,9 +76,52 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter license-server test
       - run: pnpm --filter shared test
+      - run: pnpm --filter license-server test
+      - run: pnpm --filter desktop typecheck
       - run: pnpm --filter desktop build
+
+  screenshots:
+    name: Screenshot harness (xvfb · real engine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p prism-core
+      - run: node script/copy-engine.mjs
+      - run: pnpm --filter desktop build
+      - name: capture + compare (linux baselines committed; compare is
+          best-effort until runner font stacks stabilize — artifacts always
+          uploaded for eyeball diffs)
+        run: |
+          sudo apt-get update && sudo apt-get install -y xvfb
+          xvfb-run -a node qa/screenshots/harness.cjs
+          node qa/screenshots/compare.cjs
+        continue-on-error: true # regression signal, not a hard gate yet
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: qa/screenshots/shots/
+
+  benches:
+    name: Bench suite (informational)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo bench -p prism-benches -- --quick
+        continue-on-error: true # budgets are R1 gates; CI numbers informational
 
   trace:
     name: Trace scanner + docs links
@@ -69,8 +143,8 @@ jobs:
   windows-cross:
     # cfg(windows) compile validation on Linux (AMM-002): zig cc compiles
     # the bundled C deps for COFF; cargo check type-checks every
-    # #[cfg(windows)] module. The windows-latest job below remains the
-    # authoritative MSVC build + smoke.
+    # #[cfg(windows)] module. Superseded by windows-rust above for
+    # authority; kept as the fast (no-Windows-queue) signal.
     name: Windows cross-check (cfg(windows) types)
     runs-on: ubuntu-latest
     steps:
@@ -92,17 +166,33 @@ jobs:
           sed -i 's|~/.local/zig/zig-x86_64-linux-0.14.1/zig|'"$HOME"'/zig-x86_64-linux-0.14.1/zig|' script/cc-zig-msvc.py
           cargo check --target x86_64-pc-windows-msvc -p prism-types -p prism-ntfs -p prism-core
 
-  windows:
-    name: Windows (engine cfg(windows) compile + smoke)
+  windows-app:
+    name: Windows app (electron boot · screenshots · engine)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: pnpm/action-setup@v4
         with:
-          targets: x86_64-pc-windows-msvc
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check -p prism-core
-      - run: cargo test --workspace
+      - run: pnpm install --frozen-lockfile
       - run: cargo build --release -p prism-core
-      - name: engine napi smoke
-        run: node -e "const e=require('./target/release/prism_core.dll'); e.engineInit(); console.log('engine ok', e.engineVersion())"
+      - run: node script/copy-engine.mjs
+      - run: pnpm --filter desktop build
+      - run: pnpm --filter desktop typecheck
+      - name: screenshot harness (win32 backend + real C: volumes)
+        shell: pwsh
+        run: |
+          $env:PLAYWRIGHT_BROWSERS_PATH="0"
+          node qa/screenshots/harness.cjs
+        continue-on-error: true # windows baselines land after first run
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-windows
+          path: qa/screenshots/shots/

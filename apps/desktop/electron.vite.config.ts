@@ -5,14 +5,16 @@ import { resolve } from 'node:path';
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    // @prism/shared ships TS sources (workspace): bundle it into the output
+    // instead of externalizing — a packaged main cannot import .ts.
+    plugins: [externalizeDepsPlugin({ exclude: ['@prism/shared'] })],
     build: {
       outDir: 'out/main',
       lib: { entry: resolve(__dirname, 'src/main/index.ts') },
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: ['@prism/shared'] })],
     build: {
       outDir: 'out/preload',
       lib: { entry: resolve(__dirname, 'src/preload/index.ts') },

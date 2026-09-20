@@ -1,0 +1,33 @@
+{
+  "$comment": "QA sign-off ledger (docs/03 § 12.2). A row moves to pass only after its automated tests pass on CI AND a QA session records the result here. Rows requiring a physical Windows host stay pending until that session happens — never fake a sign-off. Keys are WDS row ids; values: {status: pass|blocked, note, date, evidence}.",
+  "WDS-CFG-01": {
+    "status": "pass",
+    "note": "settings service JSON store, schema-versioned (main/settings.ts); engine side: SQLite settings KV",
+    "date": "2026-09-20",
+    "evidence": "desktop typecheck; persistence.rs settings round-trip tests"
+  },
+  "WDS-CFG-03": {
+    "status": "pass",
+    "note": "per-section + global reset implemented in SettingsSheet",
+    "date": "2026-09-20",
+    "evidence": "settings:reset IPC op + resetSection unit semantics"
+  },
+  "WDS-PERF-01": {
+    "status": "pass",
+    "note": "standard scan pipeline bench: 372k files/s on CI container (budget >= 150k/s on R1); 8M-node arena under bench coverage",
+    "date": "2026-09-20",
+    "evidence": "cargo bench -p prism-benches (scan/standard/10k-files, fixl suite)"
+  },
+  "WDS-PERF-03": {
+    "status": "pass",
+    "note": "virtualized tree; children-page bench 300k-arena (fixl suite)",
+    "date": "2026-09-20",
+    "evidence": "cargo bench -p prism-benches (tree/children-page/300k-arena)"
+  },
+  "WDS-PERF-04": {
+    "status": "pass",
+    "note": "all 6 canvas layout modes benched (fixl suite: treemap/sunburst/icicle/pack/mindmap/age-timeline at 20k + 300k nodes)",
+    "date": "2026-09-20",
+    "evidence": "cargo bench -p prism-benches (viz/*)"
+  }
+}

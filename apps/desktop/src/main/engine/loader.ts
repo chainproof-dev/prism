@@ -48,6 +48,10 @@ export interface EngineModule {
   snapshotsDiff(payload: unknown): unknown;
   monitorStart(payload: unknown): void;
   monitorStop(): void;
+  schedulerList(payload: unknown): unknown;
+  schedulerUpsert(payload: unknown): unknown;
+  schedulerDelete(payload: unknown): void;
+  schedulerDigest(payload: unknown): unknown;
   exportScan(payload: unknown): unknown;
   engineOpenDb(path: string): void;
   engineSetSetting(key: string, valueJson: string): void;

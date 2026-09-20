@@ -216,6 +216,30 @@ pub const COMMANDS: &[CommandSpec] = &[
         premium: Some("Apps"),
     },
     CommandSpec {
+        cmd: "scheduler:list",
+        req: "SchedulerListQuery",
+        res: "SchedulerPage",
+        premium: Some("Scheduler"),
+    },
+    CommandSpec {
+        cmd: "scheduler:upsert",
+        req: "SchedulerUpsertQuery",
+        res: "ScheduleSpec",
+        premium: Some("Scheduler"),
+    },
+    CommandSpec {
+        cmd: "scheduler:delete",
+        req: "SchedulerDeleteQuery",
+        res: "()",
+        premium: Some("Scheduler"),
+    },
+    CommandSpec {
+        cmd: "scheduler:digest",
+        req: "SchedulerDigestQuery",
+        res: "ScheduleDigest",
+        premium: Some("Scheduler"),
+    },
+    CommandSpec {
         cmd: "snapshots:save",
         req: "SnapshotSaveQuery",
         res: "SnapshotInfo",
@@ -811,4 +835,122 @@ pub struct ScanRecordDto {
 pub struct ScanHistoryPage {
     /// Newest first.
     pub records: Vec<ScanRecordDto>,
+}
+
+// ---------------------------------------------------------------------------
+// Scheduler (PRISM-HG-080 — docs/12 § 9). Scope guard: the ONLY schedulable
+// action is a background STANDARD scan — no scheduled cleanup, ever
+// ([01 § 8]; enforced by construction in prism-core scheduler).
+// ---------------------------------------------------------------------------
+
+/// When a schedule fires.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
+pub enum ScheduleTrigger {
+    /// Every day at HH:MM (24 h, local time).
+    Daily {
+        /// Minute-of-day 0..=1439.
+        time_min: u16,
+    },
+    /// On the given weekdays at HH:MM.
+    /// `days` uses ISO numbering (1=Mon .. 7=Sun), non-empty, deduped.
+    Weekly {
+        /// ISO weekdays (1..=7).
+        days: Vec<u8>,
+        /// Minute-of-day 0..=1439.
+        time_min: u16,
+    },
+    /// At next user logon (no time).
+    AtLogon {},
+}
+
+/// One registered schedule (the full list is the source of truth in the
+/// engine DB; Windows mirrors it into Task Scheduler entries named
+/// `PRISM\<id>`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduleSpec {
+    /// Stable id (uuid-v4-shaped string; engine-generated on create).
+    pub id: String,
+    /// User label (non-empty, ≤ 120 chars).
+    pub label: String,
+    /// Absolute scan target path.
+    pub target: String,
+    /// When to fire.
+    pub trigger: ScheduleTrigger,
+    /// Paused schedules stay listed but never fire.
+    pub enabled: bool,
+    /// Last fired at (unix ms), 0 = never.
+    pub last_run_ms: i64,
+}
+
+/// `scheduler:list` request.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SchedulerListQuery {}
+
+/// `scheduler:list` response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SchedulerPage {
+    /// All schedules (creation order).
+    pub schedules: Vec<ScheduleSpec>,
+    /// Which registration backend is live:
+    /// `task-scheduler` (Windows) or `dev-file` (off-Windows honest stub).
+    pub backend: String,
+}
+
+/// `scheduler:upsert` request. `spec.id` empty = create (engine assigns).
+///
+/// The task ACTION is constructed by the engine from `runner_exe` +
+/// `--background-scan <target>` — callers cannot inject arbitrary command
+/// lines (PRISM-HG-080 scope guard).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SchedulerUpsertQuery {
+    /// Spec (id may be empty for create).
+    pub spec: ScheduleSpec,
+    /// Absolute path of the app executable to launch (Windows registration).
+    pub runner_exe: String,
+}
+
+/// `scheduler:delete` request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SchedulerDeleteQuery {
+    /// Schedule id.
+    pub id: String,
+}
+
+/// `scheduler:digest` request — "what changed since the last scheduled
+/// capture" for one target.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SchedulerDigestQuery {
+    /// Scan root path.
+    pub target: String,
+    /// Max delta rows (1..=100).
+    pub limit: u8,
+}
+
+/// `scheduler:digest` response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduleDigest {
+    /// Target root.
+    pub target: String,
+    /// Previous snapshot at (unix ms), 0 = none.
+    pub before_ms: i64,
+    /// Latest snapshot at (unix ms), 0 = none.
+    pub after_ms: i64,
+    /// Net byte delta across the tree (signed).
+    pub bytes_delta: i64,
+    /// Net file-count delta (signed).
+    pub files_delta: i64,
+    /// Top significant deltas (biggest absolute bytes first).
+    pub top: Vec<SnapshotDelta>,
 }

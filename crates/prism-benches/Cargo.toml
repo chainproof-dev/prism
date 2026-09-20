@@ -10,9 +10,18 @@ description = "Criterion benches for scan/arena/layout/ipc budgets (docs/16-PERF
 prism-core = { path = "../prism-core" }
 prism-types = { path = "../prism-types" }
 criterion = { workspace = true }
+tempfile = { workspace = true }
 
 [[bench]]
 name = "arena"
+harness = false
+
+[[bench]]
+name = "fixl"
+harness = false
+
+[[bench]]
+name = "scan"
 harness = false
 
 [lints]

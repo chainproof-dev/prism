@@ -860,6 +860,7 @@ dependencies = [
  "criterion",
  "prism-core",
  "prism-types",
+ "tempfile",
 ]
 
 [[package]]
@@ -906,6 +907,7 @@ name = "prism-types"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
  "syn 3.0.6",
  "thiserror",
 ]

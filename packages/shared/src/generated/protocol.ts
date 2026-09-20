@@ -62,6 +62,12 @@ export type ScanTarget =
   | { kind: 'home' }
   ;
 
+export type ScheduleTrigger =
+  | { kind: 'daily'; timeMin: number }
+  | { kind: 'weekly'; days: number[]; timeMin: number }
+  | { kind: 'at-logon' }
+  ;
+
 export type SizeMode = 'logical' | 'allocated' | 'unique';
 
 export type Sku = 'yearly' | 'lifetime';
@@ -525,6 +531,45 @@ export interface ScanSummary {
   durationMs: bigint;
   errors: number;
   truncated: boolean;
+}
+
+export interface ScheduleDigest {
+  target: string;
+  beforeMs: bigint;
+  afterMs: bigint;
+  bytesDelta: bigint;
+  filesDelta: bigint;
+  top: SnapshotDelta[];
+}
+
+export interface ScheduleSpec {
+  id: string;
+  label: string;
+  target: string;
+  trigger: ScheduleTrigger;
+  enabled: boolean;
+  lastRunMs: bigint;
+}
+
+export interface SchedulerDeleteQuery {
+  id: string;
+}
+
+export interface SchedulerDigestQuery {
+  target: string;
+  limit: number;
+}
+
+export interface SchedulerListQuery {}
+
+export interface SchedulerPage {
+  schedules: ScheduleSpec[];
+  backend: string;
+}
+
+export interface SchedulerUpsertQuery {
+  spec: ScheduleSpec;
+  runnerExe: string;
 }
 
 export interface SnapshotDelta {

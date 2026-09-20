@@ -1,5 +1,5 @@
-// Settings service (WDS-CFG-01): JSON in userData, main-owned, mirrored to
-// the renderer over the bridge. Reset-per-section (WDS-CFG-03) = spread the
+// Settings service (parity-CFG-01): JSON in userData, main-owned, mirrored to
+// the renderer over the bridge. Reset-per-section (parity-CFG-03) = spread the
 // DEFAULTS over the section.
 
 import { app } from 'electron';

@@ -1,9 +1,10 @@
 // Settings sheet (docs/10 § 10): right sheet, 420px, sections with
-// reset-per-section (WDS-CFG-03). Account section: license state +
+// reset-per-section (parity-CFG-03). Account section: license state +
 // deactivate (docs/13 § 5.4).
 import { useEffect, useState } from 'react';
 import { useUiStore, useLicenseStore } from '../stores/ui';
 import { t, setLocale, type Locale } from '../lib/i18n';
+import { SchedulerSection } from './Scheduler';
 
 interface SettingsShape {
   general: { theme: string; density: string; sizeDisplay: string; language: string; autostart: boolean; shellIntegration: boolean };
@@ -142,6 +143,11 @@ const api3 = window.prism?.settings;
             <Row label="Exclusions (globs)">
               <Text value={s.scanner.exclusions.join('; ')} onChange={(v) => save({ ...s, scanner: { ...s.scanner, exclusions: v.split(';').map((x) => x.trim()).filter(Boolean) } })} />
             </Row>
+          </Section>
+
+          {/* Scheduler (PRISM-HG-080) — premium, self-locks honestly */}
+          <Section title="Scheduler" onReset={null}>
+            <SchedulerSection />
           </Section>
 
           <Section title={t('settings.viz')} onReset={() => reset('viz')}>
