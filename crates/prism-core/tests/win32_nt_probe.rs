@@ -185,16 +185,36 @@ fn query_variant(
         )
     };
     let n = iosb.information.min(buf.len());
-    let mut hex = String::new();
-    for b in buf.iter().take(n.min(96)) {
-        hex.push_str(&format!("{b:02x} "));
+    // Offset-indexed hex dump (16/row) — immune to hand-counting errors.
+    let mut dump = String::from("\n");
+    for (i, chunk) in buf[..n].chunks(16).enumerate() {
+        dump.push_str(&format!("  {:04x}: ", i * 16));
+        for b in chunk {
+            dump.push_str(&format!("{b:02x} "));
+        }
+        dump.push('\n');
+    }
+    // Programmatic decode of the first record's name at the three candidate
+    // offsets (SDK align-1 = 84, +2 = 86, union-align-8 = 88): print each
+    // as lossy UTF-16 up to the first NUL or 20 chars.
+    let mut decode = String::new();
+    for cand in [84usize, 86, 88] {
+        let mut s = String::new();
+        let mut p = cand;
+        while p + 2 <= n && p < cand + 40 {
+            let ch = u16::from_le_bytes([buf[p], buf[p + 1]]);
+            if ch == 0 {
+                break;
+            }
+            s.push(char::from_u32(ch as u32).unwrap_or('?'));
+            p += 2;
+        }
+        decode.push_str(&format!("  name@{cand} = {s:?}\n"));
     }
     emit(&format!(
-        "probe[q:{label}] {} ({}) information={} hex={}",
+        "probe[q:{label}] {} ({}) information={n}\n{dump}{decode}",
         status_name(status),
-        status,
-        iosb.information,
-        hex
+        status
     ));
     unsafe { NtClose(handle) };
     (status, iosb.information)

@@ -97,12 +97,24 @@ struct FileDirectoryInfo {
     file_name: [u16; 1], // variable, length from file_name_len
 }
 
-// FILE_ID_EXTD_DIRECTORY_INFORMATION layout. NOTE: this class has NO
-// FileNameLength field — the name is NUL-terminated (an early draft
-// invented a phantom length field, which read the first 4 bytes of the
-// name as a length). Name offset is taken with offset_of!, never
-// `size_of - 2`: repr(C) pads the struct tail to 8-byte alignment
-// (sizeof = 88, name at 84 — `size_of - 2` would be off by 4).
+// FILE_ID_128 as the kernel's ntifs.h defines it: a UNION containing
+// ULONGLONG members → 8-byte alignment. This is the subtle part: the
+// user-mode SDK spelling looks align-1 (UCHAR[16]), but the FS driver lays
+// the record out with the union alignment, pushing FileId to offset 72
+// and FileName to 88. MEASURED on a real windows-latest runner (probe v3
+// ground truth): single-entry information=90 = 88 + name(2); 3-entry
+// 298 = 96+96+106; NextEntryOffset=96; MFT-ref bytes at FileId[0..8]
+// (72..80) decode as a valid record/sequence pair.
+#[repr(C, align(8))]
+#[derive(Clone, Copy)]
+struct NtFileId128 {
+    id: [u8; 16],
+}
+
+// FILE_ID_EXTD_DIRECTORY_INFORMATION layout. This class has NO length
+// field — the name is NUL-terminated (the FINAL record may omit the NUL
+// and simply run to the end of the returned data). Name offset via
+// offset_of! — never `size_of - 2` (struct tail pads to 8).
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct FileIdExtdDirectoryInfo {
@@ -117,19 +129,18 @@ struct FileIdExtdDirectoryInfo {
     file_attributes: u32,
     ea_size: u32,
     reparse_point_tag: u32,
-    file_id: [u8; 16],   // FILE_ID_128
-    file_name: [u16; 1], // variable, NUL-terminated
+    file_id: NtFileId128, // 8-aligned → offset 72..88
+    file_name: [u16; 1],  // offset 88, variable, NUL-terminated
 }
 
-// ABI layout pinned to the documented Windows SDK sizes (x64). Any field
-// addition/removal/reorder breaks the build HERE instead of misparsing
-// kernel buffers at runtime. This is the guard that would have caught the
-// phantom-file_name_len bug at compile time.
+// ABI layout pinned to MEASURED kernel behavior (windows-latest).
+// Any field addition/removal/reorder breaks the build HERE instead of
+// misparsing kernel buffers at runtime.
 const _: () = {
     assert!(std::mem::size_of::<FileDirectoryInfo>() == 72);
     assert!(std::mem::offset_of!(FileDirectoryInfo, file_name) == 64);
-    assert!(std::mem::size_of::<FileIdExtdDirectoryInfo>() == 88);
-    assert!(std::mem::offset_of!(FileIdExtdDirectoryInfo, file_name) == 84);
+    assert!(std::mem::size_of::<FileIdExtdDirectoryInfo>() == 96);
+    assert!(std::mem::offset_of!(FileIdExtdDirectoryInfo, file_name) == 88);
 };
 
 // Attributes
@@ -286,22 +297,26 @@ impl DirEnumerator for Win32NtEnumerator {
             // drops the final batch (every small directory enumerated as
             // empty: 0 files, 0 errors — the exact windows-CI signature).
             let len = iosb.information;
-            if len > 0
-                && !parse_buffer(
+            if len > 0 {
+                let (wellformed, any_name) = parse_buffer(
                     &self.buf[..len],
                     self.use_extd,
                     self.volume_serial,
                     &mut batch,
-                )
-            {
-                // Extd class rejected by this kernel → switch class and retry
-                // the whole directory once (capability probe, build-time decision).
-                if self.use_extd {
-                    self.use_extd = false;
-                    return self.enumerate_retry_plain(task);
+                );
+                if !wellformed || (self.use_extd && !any_name) {
+                    // Malformed buffer OR the extd layout does not match this
+                    // kernel's record shape (every name scanned as empty —
+                    // exactly the signature of an ABI drift). Capability
+                    // downgrade to the unambiguous class 1 and one retry; a
+                    // wrong guess can never silently misparse names.
+                    if self.use_extd {
+                        self.use_extd = false;
+                        return self.enumerate_retry_plain(task);
+                    }
+                    batch.error = Some((-1, "unparseable directory buffer".into()));
+                    break;
                 }
-                batch.error = Some((-1, "unparseable directory buffer".into()));
-                break;
             }
             if status == STATUS_NO_MORE_FILES || status == STATUS_NO_SUCH_FILE {
                 break;
@@ -368,22 +383,27 @@ pub fn __probe_enumerate(path16: &[u16]) -> (usize, Option<i32>, bool) {
     (batch.count, batch.error.map(|(c, _)| c), e.use_extd)
 }
 
-fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> bool {
+fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> (bool, bool) {
+    // Returns (wellformed, any_name_parsed). any_name_parsed=false on a
+    // non-empty buffer means every record's name scanned as empty — the
+    // signature of an extd ABI mismatch (caller downgrades to class 1).
+    let mut any_name = false;
     let mut off: usize = 0;
     while off < buf.len() {
         if extd {
             if off + std::mem::size_of::<FileIdExtdDirectoryInfo>() > buf.len() {
-                return false;
+                return (false, any_name);
             }
             // SAFETY: the bounds check above guarantees a full record header
             // at `off`; NtQueryDirectoryFile lays records back-to-back.
             let rec: &FileIdExtdDirectoryInfo = unsafe { &*(buf.as_ptr().add(off) as *const _) };
             let next = rec.next_entry_offset as usize;
             if next != 0 && next < std::mem::size_of::<FileIdExtdDirectoryInfo>() {
-                return false; // corrupt chain (next must clear the header)
+                return (false, any_name); // corrupt chain (next must clear the header)
             }
             // This class has NO length field: the name is NUL-terminated and
-            // bounded by the next record (or the end of the returned data).
+            // bounded by the next record (or the end of the returned data —
+            // the FINAL record may omit the trailing NUL entirely).
             let name_off = off + std::mem::offset_of!(FileIdExtdDirectoryInfo, file_name);
             let span_end = if next != 0 {
                 (off + next).min(buf.len())
@@ -391,13 +411,16 @@ fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> bo
                 buf.len()
             };
             if name_off + 2 > span_end {
-                return false;
+                return (false, any_name);
             }
             let mut name_end = name_off;
             while name_end + 2 <= span_end && (buf[name_end] | buf[name_end + 1]) != 0 {
                 name_end += 2;
             }
             let name_len = name_end - name_off; // even byte count
+            if name_len > 0 {
+                any_name = true;
+            }
             // SAFETY: name bytes are inside buf (bounded above); /2 is the
             // exact UTF-16 byte→code-unit conversion.
             #[allow(clippy::integer_division)]
@@ -412,9 +435,9 @@ fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> bo
                 rec.last_write_time,
                 rec.file_attributes,
                 rec.reparse_point_tag,
-                file_id_128(&rec.file_id, serial),
+                file_id_128(&rec.file_id.id, serial),
             ) {
-                return false;
+                return (false, any_name);
             }
             if next == 0 {
                 break;
@@ -422,21 +445,24 @@ fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> bo
             off += next;
         } else {
             if off + std::mem::size_of::<FileDirectoryInfo>() > buf.len() {
-                return false;
+                return (false, any_name);
             }
             // SAFETY: the bounds check above guarantees a full record header
             // at `off` (same back-to-back layout contract as above).
             let rec: &FileDirectoryInfo = unsafe { &*(buf.as_ptr().add(off) as *const _) };
             let next = rec.next_entry_offset as usize;
             if next != 0 && next < std::mem::size_of::<FileDirectoryInfo>() {
-                return false; // corrupt chain (next must clear the header)
+                return (false, any_name); // corrupt chain (next must clear the header)
             }
             // offset_of! — never `size_of - 2`: repr(C) pads the tail to
             // 8-byte alignment (sizeof = 72, name at 64).
             let name_off = off + std::mem::offset_of!(FileDirectoryInfo, file_name);
             let name_len = rec.file_name_len as usize; // BYTES for this class
             if name_off + name_len > buf.len() {
-                return false;
+                return (false, any_name);
+            }
+            if name_len > 0 {
+                any_name = true;
             }
             // SAFETY: name bytes are inside buf (checked); /2 is the exact
             // UTF-16 byte→code-unit conversion.
@@ -457,7 +483,7 @@ fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> bo
                     file_id: 0,
                 },
             ) {
-                return false;
+                return (false, any_name);
             }
             if next == 0 {
                 break;
@@ -465,7 +491,7 @@ fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> bo
             off += next;
         }
     }
-    true
+    (true, any_name)
 }
 
 fn file_id_128(raw: &[u8; 16], serial: u32) -> FileIdentity {
