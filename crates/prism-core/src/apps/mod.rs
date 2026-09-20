@@ -66,13 +66,13 @@ pub struct InventoryApp {
 /// `include_system`.
 #[cfg(windows)]
 pub fn inventory(_include_system: bool) -> Vec<InventoryApp> {
-    use windows_sys::Win32::Foundation::{ERROR_SUCCESS, HANDLE};
+    use windows_sys::Win32::Foundation::ERROR_SUCCESS;
     use windows_sys::Win32::System::Registry::{
         HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_32KEY, KEY_WOW64_64KEY,
         REG_EXPAND_SZ, REG_SZ, RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW,
     };
 
-    const ROOTS: &[(isize, &str)] = &[
+    const ROOTS: &[(HKEY, &str)] = &[
         (
             HKEY_LOCAL_MACHINE,
             "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
@@ -127,7 +127,7 @@ pub fn inventory(_include_system: bool) -> Vec<InventoryApp> {
         for wow in [KEY_WOW64_64KEY, KEY_WOW64_32KEY] {
             let sub_w: Vec<u16> = subkey.encode_utf16().chain(std::iter::once(0)).collect();
             let mut h: HKEY = std::ptr::null_mut();
-            if unsafe { RegOpenKeyExW(root as HKEY, sub_w.as_ptr(), 0, KEY_READ | wow, &mut h) }
+            if unsafe { RegOpenKeyExW(root, sub_w.as_ptr(), 0, KEY_READ | wow, &mut h) }
                 != ERROR_SUCCESS
             {
                 continue;
@@ -158,9 +158,8 @@ pub fn inventory(_include_system: bool) -> Vec<InventoryApp> {
                     .chain(std::iter::once(0))
                     .collect();
                 let mut app_h: HKEY = std::ptr::null_mut();
-                if unsafe {
-                    RegOpenKeyExW(root as HKEY, path_w.as_ptr(), 0, KEY_READ | wow, &mut app_h)
-                } != ERROR_SUCCESS
+                if unsafe { RegOpenKeyExW(root, path_w.as_ptr(), 0, KEY_READ | wow, &mut app_h) }
+                    != ERROR_SUCCESS
                 {
                     continue;
                 }
@@ -168,7 +167,7 @@ pub fn inventory(_include_system: bool) -> Vec<InventoryApp> {
                 let uninst = read_str(app_h, &to_w("UninstallString"));
                 let publisher = read_str(app_h, &to_w("Publisher")).unwrap_or_default();
                 let sys_flag = read_str(app_h, &to_w("SystemComponent"));
-                unsafe { RegCloseKey(app_h as HANDLE) };
+                unsafe { RegCloseKey(app_h) };
                 let Some(name) = disp else { continue };
                 if name.trim().is_empty() {
                     continue;
@@ -188,7 +187,7 @@ pub fn inventory(_include_system: bool) -> Vec<InventoryApp> {
                     uninstall_cmd: uninst.unwrap_or_default(),
                 });
             }
-            unsafe { RegCloseKey(h as HANDLE) };
+            unsafe { RegCloseKey(h) };
         }
     }
     out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));

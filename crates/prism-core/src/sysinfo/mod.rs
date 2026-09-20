@@ -263,17 +263,18 @@ pub mod win32 {
 
     use prism_types::sys::{VolumeInfo, VolumeKind};
 
-    use windows_sys::Win32::Foundation::{ERROR_UNRECOGNIZED_VOLUME, FILETIME};
     use windows_sys::Win32::Security::{
         GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
     };
     use windows_sys::Win32::Storage::FileSystem::{
-        DRIVE_CDROM, DRIVE_FIXED, DRIVE_NO_ROOT_DIR, DRIVE_RAMDISK, DRIVE_REMOTE, DRIVE_REMOVABLE,
         GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW,
-        INVALID_FILE_ATTRIBUTES,
     };
     use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+    use windows_sys::Win32::System::WindowsProgramming::{
+        DRIVE_CDROM, DRIVE_FIXED, DRIVE_NO_ROOT_DIR, DRIVE_RAMDISK, DRIVE_REMOTE, DRIVE_REMOVABLE,
+    };
 
+    /// Enumerate volumes (drive letters + types + geometry).
     pub fn volumes() -> Vec<VolumeInfo> {
         let mut out = Vec::new();
         // SAFETY: bitmask return; each letter probed with NUL-terminated buffers.
@@ -397,8 +398,4 @@ pub mod win32 {
             ok != 0 && elevation.TokenIsElevated != 0
         }
     }
-
-    // keep the feature-gate types referenced (compile-time surface check)
-    #[allow(unused)]
-    fn _surface(_a: FILETIME, _b: ERROR_UNRECOGNIZED_VOLUME, _c: INVALID_FILE_ATTRIBUTES) {}
 }

@@ -1,6 +1,6 @@
 //! Win32 fast-path enumerator (docs/06 § 2.1): `NtQueryDirectoryFile` with
-//! `FileIdExtdDirectoryInformation` (128-bit ids + reparse tags in one call),
-//! with a build-time capability probe to `FileDirectoryInformation` on
+//! `FILE_ID_EXTD_DIRECTORY_INFORMATION` (128-bit ids + reparse tags in one call),
+//! with a build-time capability probe to `FILE_DIRECTORY_INFORMATION` on
 //! pre-21H2 kernels. No per-file `CreateFile` round-trips.
 //!
 //! Compiled ONLY on `cfg(windows)` (docs/06 § Platform boundary).
@@ -14,7 +14,6 @@ use windows_sys::Win32::Foundation::{HANDLE, NTSTATUS, UNICODE_STRING};
 use windows_sys::Win32::System::IO::{IO_STATUS_BLOCK, IO_STATUS_BLOCK_0};
 
 use super::{DirBatch, DirEnumerator, DirTask, EntryClass, EntryMeta, FileIdentity};
-use crate::arena::NodeId;
 
 // --- NT definitions not surfaced by windows-sys feature gates ---------------
 // (raw extern declarations; zero-cost — docs/06 § 11 policy)
@@ -45,7 +44,7 @@ struct ObjectAttributes {
 const OBJ_CASE_INSENSITIVE: u32 = 0x00000040;
 
 #[link(name = "ntdll")]
-extern "system" {
+unsafe extern "system" {
     fn NtOpenFile(
         file_handle: *mut HANDLE,
         desired_access: u32,
@@ -70,9 +69,9 @@ extern "system" {
     ) -> NTSTATUS;
 }
 
-// FileInformationClass values:
-const FileDirectoryInformation: u32 = 1;
-const FileIdExtdDirectoryInformation: u32 = 0x13; // 19
+// FileInformationClass values (NT names, kept verbatim):
+const FILE_DIRECTORY_INFORMATION: u32 = 1;
+const FILE_ID_EXTD_DIRECTORY_INFORMATION: u32 = 0x13; // 19
 
 // FILE_DIRECTORY_INFORMATION layout (tail shared with Extd where noted):
 #[repr(C)]
@@ -120,10 +119,9 @@ const FILE_READ_DATA: u32 = 0x1;
 const SYNCHRONIZE: u32 = 0x0010_0000;
 const FILE_DIRECTORY_FILE: u32 = 0x1;
 const FILE_SYNCHRONOUS_IO_NONALERT: u32 = 0x20;
-const GENERIC_READ: u32 = 0x8000_0000;
-const STATUS_NO_MORE_FILES: NTSTATUS = 0x8000_0006;
-const STATUS_NO_SUCH_FILE: NTSTATUS = 0xC000_000F;
-const STATUS_ACCESS_DENIED: NTSTATUS = 0xC000_0022;
+const STATUS_NO_MORE_FILES: NTSTATUS = 0x8000_0006u32 as i32;
+const STATUS_NO_SUCH_FILE: NTSTATUS = 0xC000_000Fu32 as i32;
+const STATUS_ACCESS_DENIED: NTSTATUS = 0xC000_0022u32 as i32;
 
 /// RAII NT file handle.
 struct NtHandle(HANDLE);
@@ -220,9 +218,9 @@ impl DirEnumerator for Win32NtEnumerator {
             Err((code, msg)) => return DirBatch::error_batch(task.node, code, msg),
         };
         let class = if self.use_extd {
-            FileIdExtdDirectoryInformation
+            FILE_ID_EXTD_DIRECTORY_INFORMATION
         } else {
-            FileDirectoryInformation
+            FILE_DIRECTORY_INFORMATION
         };
         let mut restart = 1i32;
         loop {
@@ -236,7 +234,7 @@ impl DirEnumerator for Win32NtEnumerator {
                 NtQueryDirectoryFile(
                     handle.0,
                     std::ptr::null_mut(),
-                    std::ptr::null(),
+                    std::ptr::null_mut(),
                     std::ptr::null_mut(),
                     &mut iosb,
                     self.buf.as_mut_ptr() as *mut c_void,
@@ -282,7 +280,7 @@ impl DirEnumerator for Win32NtEnumerator {
 
 impl Win32NtEnumerator {
     fn enumerate_retry_plain(&mut self, task: &DirTask) -> DirBatch {
-        // one-shot retry with FileDirectoryInformation after class downgrade
+        // one-shot retry with FILE_DIRECTORY_INFORMATION after class downgrade
         self.enumerate(task)
     }
 }

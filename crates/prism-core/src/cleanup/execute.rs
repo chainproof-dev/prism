@@ -79,8 +79,7 @@ pub fn execute(
 #[cfg(windows)]
 fn recycle_path(path: &str) -> Result<(), String> {
     use windows_sys::Win32::UI::Shell::{
-        FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_SILENT, FOFX_RECYCLEONDELETE,
-        SHFILEOPSTRUCTW,
+        FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_SILENT, SHFILEOPSTRUCTW,
     };
 
     let mut wide: Vec<u16> = path.encode_utf16().collect();
@@ -92,7 +91,9 @@ fn recycle_path(path: &str) -> Result<(), String> {
         wFunc: FO_DELETE,
         pFrom: wide.as_ptr(),
         pTo: std::ptr::null(),
-        fFlags: FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOFX_RECYCLEONDELETE,
+        // FOF_ALLOWUNDO routes to the recycle bin when the volume supports
+        // it (FOFX_RECYCLEONDELETE is IFileOperation-only — not valid here).
+        fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT) as u16,
         fAnyOperationsAborted: 0,
         hNameMappings: std::ptr::null_mut(),
         lpszProgressTitle: std::ptr::null(),
@@ -121,7 +122,7 @@ fn delete_permanent(path: &str) -> Result<(), String> {
         wFunc: FO_DELETE,
         pFrom: wide.as_ptr(),
         pTo: std::ptr::null(),
-        fFlags: FOF_NOCONFIRMATION | FOF_SILENT,
+        fFlags: (FOF_NOCONFIRMATION | FOF_SILENT) as u16,
         fAnyOperationsAborted: 0,
         hNameMappings: std::ptr::null_mut(),
         lpszProgressTitle: std::ptr::null(),

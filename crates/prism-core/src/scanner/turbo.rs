@@ -186,9 +186,13 @@ mod win {
     use super::MftEntry;
     use crate::error::EngineError;
 
+    /// Raw-volume positional reader (boot-sector-derived geometry).
     pub struct VolumeReader {
+        /// Volume handle.
         h: HANDLE,
+        /// Bytes per cluster.
         pub cluster_size: u64,
+        /// Bytes per sector.
         pub bps: u64,
     }
 
@@ -255,10 +259,9 @@ mod win {
             let mut out = vec![0u8; len];
             let mut done = 0usize;
             while done < len {
-                let dist = windows_sys::Win32::Foundation::LARGE_INTEGER {
-                    QuadPart: (offset + done as u64) as i64,
-                };
-                // SAFETY: dist is a valid stack value by value union.
+                let dist: i64 = (offset + done as u64) as i64;
+                // SAFETY: plain i64 distance (windows-sys 0.61 passes it
+                // straight through to the API's LARGE_INTEGER parameter).
                 if unsafe { SetFilePointerEx(self.h, dist, std::ptr::null_mut(), FILE_BEGIN) } == 0
                 {
                     return Err(last_os_err("seek volume"));

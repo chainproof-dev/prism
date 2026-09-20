@@ -66,6 +66,32 @@ jobs:
       - run: python3 qa/mkfixtures.py --fix-s --out /tmp/fx2
       - run: diff -r /tmp/fx1 /tmp/fx2
 
+  windows-cross:
+    # cfg(windows) compile validation on Linux (AMM-002): zig cc compiles
+    # the bundled C deps for COFF; cargo check type-checks every
+    # #[cfg(windows)] module. The windows-latest job below remains the
+    # authoritative MSVC build + smoke.
+    name: Windows cross-check (cfg(windows) types)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - name: Install zig (C cross toolchain)
+        run: |
+          curl -sL https://ziglang.org/download/0.14.1/zig-x86_64-linux-0.14.1.tar.xz | tar -xJ -C "$HOME"
+          echo "$HOME" >> "$GITHUB_PATH"
+          chmod +x script/cc-zig-msvc.py script/ar-msvc-shim.py
+      - name: cargo check cfg(windows) surface
+        env:
+          CC_x86_64_pc_windows_msvc: ${{ github.workspace }}/script/cc-zig-msvc.py
+          AR_x86_64_pc_windows_msvc: ${{ github.workspace }}/script/ar-msvc-shim.py
+        run: |
+          sed -i 's|~/.local/zig/zig-x86_64-linux-0.14.1/zig|'"$HOME"'/zig-x86_64-linux-0.14.1/zig|' script/cc-zig-msvc.py
+          cargo check --target x86_64-pc-windows-msvc -p prism-types -p prism-ntfs -p prism-core
+
   windows:
     name: Windows (engine cfg(windows) compile + smoke)
     runs-on: windows-latest

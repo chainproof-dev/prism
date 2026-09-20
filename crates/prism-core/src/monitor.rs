@@ -258,10 +258,10 @@ thread_local! {
 
 #[cfg(windows)]
 fn sample_raw() -> RawSample {
-    use windows_sys::Win32::Foundation::NTSTATUS;
-    use windows_sys::Win32::System::SystemInformation::{
-        NtQuerySystemInformation, SYSTEM_PROCESS_INFORMATION, SystemProcessInformation,
+    use windows_sys::Wdk::System::SystemInformation::{
+        NtQuerySystemInformation, SystemProcessInformation,
     };
+    use windows_sys::Win32::Foundation::NTSTATUS;
 
     #[repr(C)]
     #[allow(non_snake_case, non_camel_case_types)]
@@ -275,7 +275,7 @@ fn sample_raw() -> RawSample {
         CreateTime: i64,
         UserTime: i64,
         KernelTime: i64,
-        ImageName: windows_sys::core::UNICODE_STRING,
+        ImageName: windows_sys::Win32::Foundation::UNICODE_STRING,
         BasePriority: i32,
         UniqueProcessId: *mut core::ffi::c_void,
         InheritedFromUniqueProcessId: *mut core::ffi::c_void,
@@ -402,7 +402,8 @@ fn stash_raw(r: &RawSample) {
 
 #[cfg(windows)]
 fn cpu_times_win() -> (u64, u64) {
-    use windows_sys::Win32::System::SystemInformation::{FILETIME, GetSystemTimes};
+    use windows_sys::Win32::Foundation::FILETIME;
+    use windows_sys::Win32::System::Threading::GetSystemTimes;
     let mut idle = FILETIME {
         dwLowDateTime: 0,
         dwHighDateTime: 0,
