@@ -1,0 +1,32 @@
+# Build artifacts
+target/
+dist/
+out/
+*.node
+*.dmg
+*.exe
+*.msi
+
+# Dependencies
+node_modules/
+
+# Env / secrets — NEVER commit (docs/19-AGENT-PROTOCOL.md A9)
+.env
+.env.*
+dev-keys/*.pem
+dev-keys/*private*
+
+# Logs & databases (dev artifacts)
+*.db
+*.db-wal
+*.db-shm
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+coverage/
+.playwright-report/
+test-results/

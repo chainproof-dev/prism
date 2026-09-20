@@ -1,0 +1,42 @@
+[package]
+name = "prism-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+description = "PRISM engine — scanner, arena, aggregation, viz layout, licensing verify, IPC (docs/06-RUST-CORE.md)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+prism-types = { path = "../prism-types" }
+prism-ntfs = { path = "../prism-ntfs" }
+crossbeam-channel = { workspace = true }
+crossbeam-deque = { workspace = true }
+rayon = { workspace = true }
+parking_lot = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ciborium = { workspace = true }
+ed25519-dalek = { workspace = true }
+blake3 = { workspace = true }
+xxhash-rust = { workspace = true }
+rusqlite = { workspace = true }
+zstd = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+widestring = { workspace = true }
+napi = { workspace = true }
+napi-derive = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+proptest = { workspace = true }
+
+[lints]
+workspace = true

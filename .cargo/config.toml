@@ -1,0 +1,8 @@
+# PRISM engine build configuration.
+# `panic = unwind` is REQUIRED for the cdylib profile (NAPI boundary catch_unwind,
+# docs/06-RUST-CORE.md § 10). Nothing else is configured here on purpose:
+# target-cpu stays default for distribution compatibility.
+
+# Dev convenience: keep incremental on for fast iteration; CI uses release.
+[build]
+incremental = true

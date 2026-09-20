@@ -1,0 +1,43 @@
+{
+  "name": "prism-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "PRISM — Windows disk analyzer (Electron + React + TypeScript + Vite, Rust core engine). Internal codename; shipping name is an owner decision (docs/00-INDEX.md).",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "dev": "pnpm dev:all",
+    "dev:all": "node script/dev.mjs",
+    "dev:server": "pnpm --filter license-server dev",
+    "dev:desktop": "pnpm --filter desktop dev",
+    "build": "pnpm --filter shared build && pnpm --filter ui build && pnpm --filter desktop build && pnpm --filter license-server build",
+    "build:engine": "cargo build -p prism-core",
+    "build:engine:release": "cargo build --release -p prism-core",
+    "test": "pnpm --filter shared test && pnpm --filter ui test && pnpm --filter license-server test && pnpm --filter desktop test",
+    "test:rust": "cargo test --workspace",
+    "typecheck": "tsc -b packages/shared packages/ui apps/desktop apps/license-server",
+    "lint": "eslint .",
+    "fmt": "prettier --write .",
+    "codegen": "cargo run -p prism-types -- emit-ts packages/shared/src/generated/ && pnpm --filter shared gen:zod",
+    "codegen:check": "cargo run -p prism-types -- emit-ts --check packages/shared/src/generated/",
+    "lic:admin": "node apps/license-server/dist/admin/cli.mjs",
+    "lic:seed": "pnpm --filter license-server seed",
+    "trace:scan": "node script/trace-scan.mjs",
+    "docs:links": "node script/link-check.mjs",
+    "qa:parity": "node qa/parity-dashboard.mjs",
+    "fixtures": "python3 qa/mkfixtures.py --all"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/node": "^24.0.0",
+    "eslint": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "prettier": "latest",
+    "typescript": "7.0.2",
+    "typescript-eslint": "latest",
+    "vitest": "5.0.1"
+  }
+}

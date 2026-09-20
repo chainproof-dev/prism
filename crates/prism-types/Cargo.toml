@@ -1,0 +1,32 @@
+[package]
+name = "prism-types"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+description = "PRISM DTOs — the single type source for TS codegen and the IPC surface (docs/05-IPC-PROTOCOL.md § 6)"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "emit-ts"
+path = "src/bin/emit_ts.rs"
+required-features = ["emit"]
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+
+
+# emit-ts binary only: parses this crate's own sources so the TS output can
+# never drift from the Rust definitions (docs/05-IPC-PROTOCOL.md § 6).
+syn = { version = "3", features = ["full", "derive", "parsing"], optional = true }
+
+[features]
+default = []
+emit = ["dep:syn"]
+
+[lints]
+workspace = true

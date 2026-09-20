@@ -1,0 +1,5 @@
+packages:
+  - apps/desktop
+  - apps/license-server
+  - packages/shared
+  - packages/ui

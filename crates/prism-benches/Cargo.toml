@@ -1,0 +1,19 @@
+[package]
+name = "prism-benches"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+description = "Criterion benches for scan/arena/layout/ipc budgets (docs/16-PERFORMANCE-BUDGETS.md)"
+
+[dependencies]
+prism-core = { path = "../prism-core" }
+prism-types = { path = "../prism-types" }
+criterion = { workspace = true }
+
+[[bench]]
+name = "arena"
+harness = false
+
+[lints]
+workspace = true

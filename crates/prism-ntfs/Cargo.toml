@@ -1,0 +1,18 @@
+[package]
+name = "prism-ntfs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+description = "Raw NTFS parsing: MFT records, run lists, attributes, USN journal (docs/06 § 3)"
+
+[dependencies]
+thiserror = { workspace = true }
+tracing = { workspace = true }
+byteorder = "1.5"
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true
