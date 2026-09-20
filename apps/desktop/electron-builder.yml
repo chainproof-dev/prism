@@ -1,0 +1,55 @@
+# electron-builder 26 config (docs/15 § 4): NSIS primary + portable.
+# Signing (Azure Trusted Signing / EV) is injected via CI env —
+# CSC_LINK/CSC_KEY_PASSWORD or azure credentials; unsigned builds fail the
+# release pipeline's signtool verify step (docs/15 § 5).
+appId: com.prismlabs.prism
+productName: Prism
+copyright: Copyright © 2026 Prism Labs
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - out/**/*
+  - "!**/*.map"
+  - package.json
+
+# The engine ships per-arch (no fat bundles — docs/15 § 1).
+extraResources:
+  - from: resources/${arch}/prism-core.node
+    to: prism-core.node
+    filter:
+      - "**/*"
+
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+    - target: portable
+      arch: [x64]
+  verifyUpdateCodeSignature: true
+  # signtoolOptions are provided by CI (Azure Trusted Signing profile).
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  deleteAppDataOnUninstall: false
+  differentialPackage: true
+  shortcutName: Prism
+  include: build/installer.nsh
+
+portable:
+  artifactName: Prism-Portable-${version}-${arch}.exe
+
+publish:
+  provider: generic
+  url: ${env.UPDATE_FEED_URL}
+  channel: latest
+
+# Update feed layout (docs/15 § 6): /<channel>/latest.yml + installers +
+# blockmaps. electron-updater verifies manifest signature (publisher
+# identity compiled in at build), package sha512, and Authenticode on the
+# downloaded installer before execution; version policy rejects downgrades.

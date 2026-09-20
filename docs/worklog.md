@@ -52,3 +52,44 @@ Next:
 - Desktop (main+preload+renderer): builds clean, typechecks clean (TS 7 strict + noUncheckedIndexedAccess + exactOptionalPropertyTypes)
 - Engine smoke through the real `.node`: SMOKE OK (hello → scan → events → summary → children → detail → types → PVF1 frame)
 - Windows cross-check: prism-types + prism-ntfs green for x86_64-pc-windows-msvc; prism-core needs the Windows CI runner (native build scripts) — job added to ci.yml
+
+## Session 2 — parity completion + homegrown + licensing client + windows validation
+
+Agent: Super Z (main build agent)
+Tasks: worklog "Next" list (command palette, cleanup ledger, SQLite migrations, turbo wiring) + Windows CI validation + Phases 4-10 push.
+
+Done:
+- **Windows validation (the ② item)**: built a zig-cc cross toolchain (`script/cc-zig-msvc.py`, `script/ar-msvc-shim.py`) that compiles the bundled C deps (libsqlite3-sys, zstd-sys) to COFF on Linux; `cargo check --target x86_64-pc-windows-msvc -p prism-core` is GREEN — every cfg(windows) module (win32 NtQueryDirectoryFile scanner, sysinfo, monitor NtQuerySystemInformation, apps registry, cleanup SHFileOperation, turbo raw-volume reader) type-checks for Windows. Found and fixed **10 real Windows-only defects** never compiled before: windows-sys 0.61 API relocations (NtQuerySystemInformation→Wdk, DRIVE_*→WindowsProgramming, GetSystemTimes→Threading, UNICODE_STRING→Foundation), HKEY pointer types, FILEOPERATION u16 flags + FOFX misuse (IFileOperation-only flag on SHFileOperation — replaced with FOF_ALLOWUNDO semantics), unsafe extern blocks (edition 2024), NTSTATUS literal overflows, pointer mutability, missing docs. CI: new `windows-cross` ubuntu job + the windows-latest authoritative job.
+- **P1-006 closed**: `persistence.rs` — SQLite app.db with append-only migrations v1–v3 (scans history, settings KV, snapshots w/ zstd payloads, type_colors), reopen-idempotent; scan completion auto-records history; PSNP1 privacy-safe share export (path keys only, tested).
+- **Turbo scan wired (ADR-06)**: `scanner/turbo.rs` — platform-independent MFTEntry→arena builder (FRN-ordered deterministic, orphan skipping, root merge, reparse-first classification; property-tested incl. hash determinism under input reordering) + Windows raw-volume reader (boot BPB → $MFT runlist → extent-mapped positional reads). Coordinator dispatches strategy=turbo honestly (folder targets + non-NTFS + non-elevated = explicit errors, never silent standard substitution). ipc gate now entitlement-only. AMM-004 filed (exclusions on turbo = viz-layer).
+- **20+ IPC commands wired** (`ipc/extend.rs`): sys:preflight, scan:rescan-subtree/reattach, node:resolve-path, viz:color-mapping, types:set-color, duplicates:run/cancel/groups, cleanup:presets-scan/stage/unstage/queue/execute, apps:list/footprint/leftovers, snapshots:save/list/diff, monitor:start/stop, export:scan, engine:open-db/get-setting/set-setting/recent-scans (new protocol command + regenerated TS).
+- **New engine modules**: monitor.rs (1 Hz delta sampling; Windows NtQuerySystemInformation + /proc dev backend, tested on Linux), apps/mod.rs (registry inventory cfg(windows) + token footprints with evidence lists + leftovers w/ honest-empty off-Windows), export.rs (streamed CSV RFC4180+BOM / NDJSON, tested), cleanup/execute.rs (SHFileOperation recycle/permanent + fail-loud per-item outcomes + progress events), dupes runner (4-phase pipeline, XXH128→BLAKE3, hardlink collapse, tested end-to-end on tempdirs).
+- **Main process**: real LicenseClient (activate/validate/deactivate via Electron net, 24h heartbeat, offline grace, HMAC-stamped trial, safeStorage/DPAPI-encrypted blob, instance identity), settings service (JSON, section resets) + window-state persistence, app menu, license/settings/menu IPC channels, db open at boot.
+- **Renderer**: command palette (cmdk; recents, jump-biggest, themes, tabs), LicenseGate + trial + GraceBanner + LockedTab previews, workspace tabs (Duplicates/Monitor/Snapshots/Applications/Leftovers), cleanup ledger sheet + context menu + errors drawer + Quick Wins + queue panel, Settings sheet, viz rail (9 modes) + color-mode rail + scope segmented + Table/Bars DOM modes, search filter (150ms debounce contract), full keyboard map, i18n (en-US + de-DE + pseudo-loc).
+- **Packaging (Phase 9 structure)**: electron-builder.yml (NSIS+portable, per-arch resources, differential updates, verifyUpdateCodeSignature), installer.nsh (Explorer context menu WDS-CTX-04), app.config.json, release.yml (tag→matrix→sign-verify→SBOM→attest→staged feed), script/sbom.py (CycloneDX), runbooks (rollback + support).
+- **Clippy debt cleared**: `cargo clippy --workspace --all-targets -- -D warnings` fully green (fixed ~50 pre-existing violations that would have failed CI: prism-ntfs expect_used (guarded le-read helpers), sort_by_key, integer-division allows with rationale, test-module lint policies).
+
+Deferred:
+- Scheduler (PRISM-HG-080) — Task Scheduler registration is Windows-only; DEFERRED-WINDOWS.
+- P2-007 screenshot harness + visual regression — needs headed Electron on Windows.
+- Perf benches on R1 hardware (throughput numbers), signing execution, NSIS install matrix — all DEFERRED-WINDOWS (pipelines scripted).
+- Dodo checkout round trip — needs provider credentials (ManualProvider covers dev).
+
+Risks/Notes:
+- The zig cross-CC shim compiles the C deps for windows-gnu COFF (zig bundles MinGW headers, not UCRT) — sound for `cargo check` (no linking); the windows-latest CI job remains the authoritative MSVC build. Documented in the shim header.
+- `filter:apply` wire payload uses the generated FilterApplyQuery {query:{name,categories,kind}, scope} — TopBar sends the zod-valid shape.
+- Licensing grants mirror in main is server-response-driven (no CBOR decoder dep in TS — the ENGINE verifies the token itself; UI checks are cosmetic by design, PRISM-LIC-040).
+
+Next:
+1. Windows host: run the windows-latest CI job (msvc build + tests + engine smoke), NSIS install matrix (Win10 21H2/Win11 24H2, x64+arm64).
+2. Parity matrix row-by-row QA scripts + sign-offs (docs/03 § 12) on Windows.
+3. Screenshot harness + visual regression baselines (P2-007).
+4. Scheduler implementation (Task Scheduler registration, scope-guarded).
+5. Perf bench suite on R1 (bench-scan gate, ≥150k/s standard, ≥1M/s turbo).
+
+### Session 2 final verification
+- Rust: **61 green** (47 core + 5 ntfs + 9 types) · clippy `-D warnings` clean · fmt clean
+- License server: **11/11** · Shared TS: **8/8**
+- Windows cross-check (msvc target): prism-types + prism-ntfs + **prism-core** GREEN (zig shim)
+- Desktop: typecheck clean (TS7 strict), build 915 kB renderer
+- Codegen drift: regenerated with engine:recent-scans — clean

@@ -1,0 +1,7 @@
+{
+  "channel": "stable",
+  "licenseServerUrl": "http://localhost:8080",
+  "updateFeed": "https://updates.prismlabs.example/stable",
+  "crashReporting": null,
+  "featureFlags": {}
+}

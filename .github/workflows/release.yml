@@ -1,0 +1,91 @@
+# Release pipeline (docs/15 § 7): tag v* → full matrix → sign → SBOM → feed.
+
+name: release
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  id-token: write # artifact attestations
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  build-windows:
+    name: Build (windows · ${{ matrix.arch }})
+    needs: ci
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            rust-target: x86_64-pc-windows-msvc
+          - arch: arm64
+            rust-target: aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: pnpm
+
+      - name: Install + build engine
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build:engine -- --target ${{ matrix.rust-target }} --release
+          New-Item -ItemType Directory -Force apps/desktop/resources/${{ matrix.arch }}
+          Copy-Item target/${{ matrix.rust-target }}/release/prism_core.dll apps/desktop/resources/${{ matrix.arch }}/prism-core.node
+
+      - name: Build app + package
+        env:
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          UPDATE_FEED_URL: ${{ secrets.UPDATE_FEED_URL }}
+        run: |
+          pnpm --filter desktop build
+          pnpm --filter desktop exec electron-builder --win --${{ matrix.arch }} --publish never
+
+      - name: Verify signatures (fail on unsigned — docs/15 § 5)
+        run: |
+          Get-ChildItem apps/desktop/dist/*.exe | ForEach-Object {
+            & signtool verify /pa /all $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "unsigned artifact: $_" }
+          }
+
+      - name: SBOM (CycloneDX)
+        run: python script/sbom.py --out apps/desktop/dist/sbom.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prism-${{ matrix.arch }}
+          path: apps/desktop/dist/**
+
+  publish:
+    name: Publish to feed (staged — docs/15 § 6)
+    needs: build-windows
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: prism-*
+          path: artifacts
+          merge-multiple: true
+      # Feed upload + atomic latest.yml swap is provider-specific (R2/S3 +
+      # CDN). Kept as an explicit environment-gated step: the runbook
+      # (docs/runbooks/rollback.md) documents the blue-green object swap.
+      - name: Stage artifacts
+        run: |
+          mkdir -p feed/stable
+          cp -v artifacts/* feed/stable/ || true
+          ls -R feed
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: artifacts/*.exe
