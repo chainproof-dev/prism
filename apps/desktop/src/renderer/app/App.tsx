@@ -5,10 +5,9 @@ import { useScanStore } from '../stores/scan';
 import { AppShell } from '../components/AppShell';
 import { Welcome } from '../components/Welcome';
 import { ScanningOverlay } from '../components/ScanningOverlay';
-import { Explore, StatusStrip } from '../components/Explore';
+import { Explore } from '../components/Explore';
 import { TopBar } from '../components/TopBar';
 import { cancelScan } from '../lib/prism';
-import { formatBytes, formatDuration } from '@prism/shared/client';
 
 export function App(): React.ReactElement {
   const screen = useScanStore((s) => s.screen);

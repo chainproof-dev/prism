@@ -89,57 +89,57 @@ import * as S from './schemas';
 
 export interface RequestSchemas {
   'sys:hello': null;
-  'sys:volumes': S.VolumesQuerySchema;
-  'sys:preflight': S.PreflightQuerySchema;
-  'scan:start': S.ScanStartQuerySchema;
-  'scan:pause': S.ScanControlQuerySchema;
-  'scan:resume': S.ScanControlQuerySchema;
-  'scan:cancel': S.ScanControlQuerySchema;
-  'scan:summary': S.ScanControlQuerySchema;
-  'scan:rescan-subtree': S.RescanQuerySchema;
-  'scan:reattach': S.ScanControlQuerySchema;
-  'tree:children': S.ChildrenQuerySchema;
-  'tree:expand-stats': S.NodeQuerySchema;
-  'node:detail': S.NodeQuerySchema;
-  'node:resolve-path': S.ResolvePathQuerySchema;
-  'viz:layout': S.VizLayoutQuerySchema;
-  'viz:color-mapping': S.ColorMappingQuerySchema;
-  'types:list': S.TypesQuerySchema;
-  'types:set-color': S.TypeColorQuerySchema;
-  'filter:apply': S.FilterApplyQuerySchema;
-  'filter:clear': S.ScanControlQuerySchema;
-  'duplicates:run': S.DupesRunQuerySchema;
-  'duplicates:cancel': S.ScanControlQuerySchema;
-  'duplicates:groups': S.DupesGroupsQuerySchema;
-  'cleanup:presets-scan': S.ScanControlQuerySchema;
-  'cleanup:stage': S.StageQuerySchema;
-  'cleanup:unstage': S.UnstageQuerySchema;
-  'cleanup:queue': S.ScanControlQuerySchema;
-  'cleanup:execute': S.ExecuteQuerySchema;
-  'apps:list': S.AppsQuerySchema;
-  'apps:footprint': S.AppFootprintQuerySchema;
-  'apps:leftovers': S.ScanControlQuerySchema;
-  'snapshots:save': S.SnapshotSaveQuerySchema;
-  'snapshots:list': S.SnapshotsQuerySchema;
-  'snapshots:diff': S.SnapshotDiffQuerySchema;
-  'monitor:start': S.MonitorQuerySchema;
-  'monitor:stop': S.MonitorQuerySchema;
-  'export:scan': S.ExportQuerySchema;
-  'lic:verify-token': S.VerifyTokenQuerySchema;
+  'sys:volumes': typeof S.VolumesQuerySchema;
+  'sys:preflight': typeof S.PreflightQuerySchema;
+  'scan:start': typeof S.ScanStartQuerySchema;
+  'scan:pause': typeof S.ScanControlQuerySchema;
+  'scan:resume': typeof S.ScanControlQuerySchema;
+  'scan:cancel': typeof S.ScanControlQuerySchema;
+  'scan:summary': typeof S.ScanControlQuerySchema;
+  'scan:rescan-subtree': typeof S.RescanQuerySchema;
+  'scan:reattach': typeof S.ScanControlQuerySchema;
+  'tree:children': typeof S.ChildrenQuerySchema;
+  'tree:expand-stats': typeof S.NodeQuerySchema;
+  'node:detail': typeof S.NodeQuerySchema;
+  'node:resolve-path': typeof S.ResolvePathQuerySchema;
+  'viz:layout': typeof S.VizLayoutQuerySchema;
+  'viz:color-mapping': typeof S.ColorMappingQuerySchema;
+  'types:list': typeof S.TypesQuerySchema;
+  'types:set-color': typeof S.TypeColorQuerySchema;
+  'filter:apply': typeof S.FilterApplyQuerySchema;
+  'filter:clear': typeof S.ScanControlQuerySchema;
+  'duplicates:run': typeof S.DupesRunQuerySchema;
+  'duplicates:cancel': typeof S.ScanControlQuerySchema;
+  'duplicates:groups': typeof S.DupesGroupsQuerySchema;
+  'cleanup:presets-scan': typeof S.ScanControlQuerySchema;
+  'cleanup:stage': typeof S.StageQuerySchema;
+  'cleanup:unstage': typeof S.UnstageQuerySchema;
+  'cleanup:queue': typeof S.ScanControlQuerySchema;
+  'cleanup:execute': typeof S.ExecuteQuerySchema;
+  'apps:list': typeof S.AppsQuerySchema;
+  'apps:footprint': typeof S.AppFootprintQuerySchema;
+  'apps:leftovers': typeof S.ScanControlQuerySchema;
+  'snapshots:save': typeof S.SnapshotSaveQuerySchema;
+  'snapshots:list': typeof S.SnapshotsQuerySchema;
+  'snapshots:diff': typeof S.SnapshotDiffQuerySchema;
+  'monitor:start': typeof S.MonitorQuerySchema;
+  'monitor:stop': typeof S.MonitorQuerySchema;
+  'export:scan': typeof S.ExportQuerySchema;
+  'lic:verify-token': typeof S.VerifyTokenQuerySchema;
 }
 
 export const PremiumCommands: Record<string, P.PremiumFeature> = {
-  'duplicates:run': 'Dupes',
-  'duplicates:cancel': 'Dupes',
-  'duplicates:groups': 'Dupes',
-  'cleanup:execute': 'Cleanup',
-  'apps:list': 'Apps',
-  'apps:footprint': 'Apps',
-  'apps:leftovers': 'Apps',
-  'snapshots:save': 'Snapshots',
-  'snapshots:list': 'Snapshots',
-  'snapshots:diff': 'Snapshots',
-  'monitor:start': 'Monitor',
-  'monitor:stop': 'Monitor',
-  'export:scan': 'Export',
+  'duplicates:run': 'dupes',
+  'duplicates:cancel': 'dupes',
+  'duplicates:groups': 'dupes',
+  'cleanup:execute': 'cleanup',
+  'apps:list': 'apps',
+  'apps:footprint': 'apps',
+  'apps:leftovers': 'apps',
+  'snapshots:save': 'snapshots',
+  'snapshots:list': 'snapshots',
+  'snapshots:diff': 'snapshots',
+  'monitor:start': 'monitor',
+  'monitor:stop': 'monitor',
+  'export:scan': 'export',
 };

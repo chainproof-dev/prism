@@ -1,7 +1,7 @@
 // Welcome (docs/10 § 3, parity-SEL-01..06): drive cards with DonutGauge,
 // folder scan, recents. Premium entrance stagger (docs/09 § 2.3).
 import { useCallback, useEffect, useState } from 'react';
-import { FolderOpen, HardDrive, RefreshCw, Usb, Network, Globe, Cpu } from 'lucide-react';
+import { FolderOpen, HardDrive, RefreshCw, Usb, Network, Cpu } from 'lucide-react';
 import { useScanStore } from '../stores/scan';
 import { formatBytes, formatPercent } from '@prism/shared/client';
 import type { VolumeInfo } from '@prism/shared/generated';
@@ -34,8 +34,8 @@ function volumeIcon(kind: VolumeInfo['kind']): React.ReactElement {
   }
 }
 
-function DonutGauge({ used, total }: { used: number; total: number }): React.ReactElement {
-  const share = total > 0 ? Math.min(used / Number(total), 1) : 0;
+function DonutGauge({ used, total }: { used: number | bigint; total: number | bigint }): React.ReactElement {
+  const share = Number(total) > 0 ? Math.min(Number(used) / Number(total), 1) : 0;
   const r = 22;
   const circ = 2 * Math.PI * r;
   return (
@@ -60,7 +60,7 @@ function DonutGauge({ used, total }: { used: number; total: number }): React.Rea
 }
 
 function DriveCard({ vol, onScan, index }: { vol: VolumeInfo; onScan: (path: string) => void; index: number }): React.ReactElement | null {
-  if (!vol.hasMedia || vol.total === 0) {
+  if (!vol.hasMedia || Number(vol.total) === 0) {
     return null; // no-media drives excluded (parity-SEL-03)
   }
   const used = Number(vol.total) - Number(vol.free);

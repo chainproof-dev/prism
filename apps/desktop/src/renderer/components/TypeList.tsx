@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { typesList } from '../lib/prism';
 import type { TypeRow } from '@prism/shared/generated';
-import { formatBytes, formatPercent } from '@prism/shared/client';
+import { formatBytes } from '@prism/shared/client';
 import { resolvePaletteIndex, dataPalette } from '../lib/palette';
 import { useScanStore } from '../stores/scan';
 

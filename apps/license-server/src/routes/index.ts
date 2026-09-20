@@ -35,15 +35,15 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   const { db, sign, keyId, adminToken } = deps;
 
   const err = (code: string, message: string, extra?: Record<string, unknown>) => {
-    const reply: Record<string, unknown> = { error: { code, message } };
+    const error: Record<string, unknown> = { code, message };
     if (extra) {
-      Object.assign(reply.error, extra);
+      Object.assign(error, extra);
     }
-    return reply;
+    return { error };
   };
 
   // --- health ---------------------------------------------------------------
-  app.get('/v1/health', async () => ({
+  app.get('/v1/health', async (): Promise<{ ok: boolean; version: string; time: number }> => ({
     ok: true,
     version: process.env.npm_package_version ?? '0.1.0',
     time: Date.now(),

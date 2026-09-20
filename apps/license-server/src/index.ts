@@ -20,8 +20,9 @@ async function main(): Promise<void> {
   const { publicKeyHex, sign } = await loadKeyPair(pem);
   logger.info({ publicKeyHex: publicKeyHex.slice(0, 16) + '…' }, 'signing key loaded');
 
+  // standalone pino (docs/13 § 7); loggerInstance generic churn not worth it
   const app = Fastify({
-    loggerInstance: logger as never,
+    logger: false,
     bodyLimit: 4096, // docs/13 § 7: request body ≤ 4 KiB
   });
 

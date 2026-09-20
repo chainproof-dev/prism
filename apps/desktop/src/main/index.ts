@@ -8,18 +8,19 @@ import { randomUUID } from 'node:crypto';
 
 // --- licensing client (main-side; renderer never sees tokens, PRISM-IPC-054)
 const instanceId = randomUUID();
-let cachedEntitlement: { token: string; exp: number } | null = null;
+const entitlementBox: { current: { token: string; exp: number } | null } = { current: null };
 
 const license = {
   instanceId: () => instanceId,
   verifyEntitlement: async (feature: string): Promise<{ token: string } | null> => {
-    if (!cachedEntitlement) {
+    const cached = entitlementBox.current;
+    if (!cached) {
       return null;
     }
     // engine-boundary verification (the engine is the gate, not this check)
     try {
-      deps.engine.licVerifyToken(cachedEntitlement.token, feature);
-      return { token: cachedEntitlement.token };
+      deps.engine.licVerifyToken(cached.token, feature);
+      return { token: cached.token };
     } catch {
       return null;
     }

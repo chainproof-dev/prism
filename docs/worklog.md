@@ -45,3 +45,10 @@ Next:
 ### Session 1 addendum — windows-msvc cross-check
 - `cargo check --target x86_64-pc-windows-msvc` validated for `prism-types` and `prism-ntfs` (pure Rust — green).
 - `prism-core` cross-check blocked on this Linux host by native build scripts (libsqlite3-sys/zstd-sys need MSVC). The cfg(windows) modules (`scanner/win32.rs`, `sysinfo/win32.rs`) are Windows-CI territory: the `windows-msvc` job must run on the Windows matrix runner (added to ci.yml as `windows-codegen` note). Not a code defect — a toolchain availability limitation, recorded here per A10.
+
+### Session 1 final verification
+- Rust: **40/40** · License server: **11/11** · Shared TS: **8/8**
+- Trace scanner: clean · Docs links: clean (25 docs) · Fixtures: deterministic
+- Desktop (main+preload+renderer): builds clean, typechecks clean (TS 7 strict + noUncheckedIndexedAccess + exactOptionalPropertyTypes)
+- Engine smoke through the real `.node`: SMOKE OK (hello → scan → events → summary → children → detail → types → PVF1 frame)
+- Windows cross-check: prism-types + prism-ntfs green for x86_64-pc-windows-msvc; prism-core needs the Windows CI runner (native build scripts) — job added to ci.yml

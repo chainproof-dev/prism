@@ -330,7 +330,7 @@ fn type_expr_opt(ty: &syn::Type) -> (String, bool) {
 
 fn map_ident(ident: &str) -> String {
     match ident {
-        "String" | "PathBuf" => "string".into(),
+        "String" | "PathBuf" | "str" => "string".into(),
         "bool" => "boolean".into(),
         // byte counts cross as BigInt (docs/05 § 3.3 — exact end-to-end)
         "u64" | "i64" | "u128" => "bigint".into(),
@@ -448,10 +448,11 @@ fn emit_schemas(m: &Model) -> String {
         if let Some((enum_name, _)) = m.enums.get_key_value(target) {
             let _ = enum_name;
             out.push_str(&format!("export const {name}Schema = {target}Schema;\n"));
-        } else if matches!(target.as_str(), "string" | "boolean" | "number") {
+        } else if matches!(target.as_str(), "string" | "boolean" | "number" | "bigint") {
             let prim = match target.as_str() {
                 "string" => "z.string()",
                 "boolean" => "z.boolean()",
+                "bigint" => "z.bigint()",
                 _ => "z.number()",
             };
             out.push_str(&format!("export const {name}Schema = {prim};\n"));
@@ -539,7 +540,7 @@ fn emit_commands(m: &Model) -> String {
         if c.req == "()" {
             out.push_str(&format!("  '{}': null;\n", c.cmd));
         } else {
-            out.push_str(&format!("  '{}': S.{}Schema;\n", c.cmd, c.req));
+            out.push_str(&format!("  '{}': typeof S.{}Schema;\n", c.cmd, c.req));
         }
     }
     out.push_str("}\n\n");
@@ -547,7 +548,8 @@ fn emit_commands(m: &Model) -> String {
     out.push_str("export const PremiumCommands: Record<string, P.PremiumFeature> = {\n");
     for c in &m.commands {
         if let Some(p) = &c.premium {
-            out.push_str(&format!("  '{}': '{}',\n", c.cmd, p));
+            let kebab = to_snake(p).replace('_', "-");
+            out.push_str(&format!("  '{}': '{}',\n", c.cmd, kebab));
         }
     }
     out.push_str("};\n");

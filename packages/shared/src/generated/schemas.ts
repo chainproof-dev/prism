@@ -111,10 +111,10 @@ export const ColorMappingQuerySchema = z.object({
 });
 
 export const CommandSpecSchema = z.object({
-  cmd: z.lazy(() => strSchema),
-  req: z.lazy(() => strSchema),
-  res: z.lazy(() => strSchema),
-  premium: z.lazy(() => strSchema).optional(),
+  cmd: z.string(),
+  req: z.string(),
+  res: z.string(),
+  premium: z.string().optional(),
 });
 
 export const DeviceIdentitySchema = z.object({
@@ -628,5 +628,8 @@ export const VolumesQuerySchema = z.object({
 
 export const CategoryIdSchema = z.number();
 export const ExtIdSchema = z.number();
+export const FileIdSchema = z.bigint();
+export const FileTimeTicksSchema = z.bigint();
 export const NodeIdSchema = z.number();
 export const ScanIdSchema = z.number();
+export const UnixMsSchema = z.bigint();

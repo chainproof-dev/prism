@@ -41,9 +41,10 @@ describe('viz-frame decoder (round-trips the Rust encoder wire format)', () => {
     expect(d.w).toBe(800);
     expect(d.dpr).toBe(2);
     expect(d.tiles).toHaveLength(2);
-    expect(d.tiles[1].flags & TileFlags.COMPOSITE).toBeTruthy();
-    expect(d.tiles[1].depth).toBe(2);
-    expect(d.labels[0].text).toBe('Users');
+    const tile1 = d.tiles[1]!;
+    expect((tile1.flags & TileFlags.COMPOSITE) !== 0).toBe(true);
+    expect(tile1.depth).toBe(2);
+    expect(d.labels[0]?.text).toBe('Users');
     expect(d.paletteIndexed).toBe(true);
   });
   it('rejects corrupted frames loudly', () => {

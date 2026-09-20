@@ -7,7 +7,6 @@ import { decodeVizFrame, TileFlags, type DecodedFrame } from '@prism/shared/viz-
 import { dataPalette, resolvePaletteIndex, toCanvasColor } from '../lib/palette';
 import { useScanStore } from '../stores/scan';
 import { vizLayout } from '../lib/prism';
-import { formatBytes, formatPercent } from '@prism/shared/client';
 
 interface HitCell {
   nodes: number[];

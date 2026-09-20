@@ -8,12 +8,13 @@ import * as api from '../lib/prism';
 
 export type Screen = 'welcome' | 'scanning' | 'explore';
 
+/** Live tree node (deltas stream BigInt sizes — docs/05 § 3.3). */
 interface LiveNode {
   id: number;
   parent: number;
   name: string;
-  logical: number;
-  allocated: number;
+  logical: bigint;
+  allocated: bigint;
   kind: number;
 }
 
@@ -94,8 +95,8 @@ export const useScanStore = create<ScanState>((set, get) => ({
 function applyDelta(tree: Map<number, LiveNode>, d: NodeDelta): void {
   const existing = tree.get(d.id);
   if (existing) {
-    tree.set(d.id, { ...existing, logical: d.logical, allocated: d.allocated });
+    tree.set(d.id, { ...existing, logical: BigInt(d.logical), allocated: BigInt(d.allocated) });
   } else {
-    tree.set(d.id, { id: d.id, parent: d.parent, name: d.name, logical: d.logical, allocated: d.allocated, kind: d.kind });
+    tree.set(d.id, { id: d.id, parent: d.parent, name: d.name, logical: BigInt(d.logical), allocated: BigInt(d.allocated), kind: d.kind });
   }
 }

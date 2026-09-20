@@ -141,7 +141,7 @@ describe('token forgery (bit-flip)', () => {
     });
     const { entitlement } = res.json() as { entitlement: string };
     const bytes = Uint8Array.from(atob(entitlement), (c) => c.charCodeAt(0));
-    bytes[10] ^= 0x01;
+    bytes[10] = (bytes[10] ?? 0) ^ 0x01;
     const tampered = btoa(String.fromCharCode(...bytes));
     await expect(verifyToken(tampered, PUBLISHED_ENGINE_PUBKEY)).rejects.toThrow(/signature/);
   });

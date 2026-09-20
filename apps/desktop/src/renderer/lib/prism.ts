@@ -11,7 +11,6 @@ import type {
   EngineEvent,
   NodeDetail,
   NodeRowsPage,
-  ScanSummary,
   TypesPage,
   VolumeInfo,
 } from '@prism/shared/generated';

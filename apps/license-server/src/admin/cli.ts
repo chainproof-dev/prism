@@ -11,7 +11,7 @@ async function call(method: string, path: string, body?: unknown): Promise<unkno
       authorization: `Bearer ${TOKEN}`,
       ...(body ? { 'content-type': 'application/json' } : {}),
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: body ? JSON.stringify(body) : null,
   });
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {

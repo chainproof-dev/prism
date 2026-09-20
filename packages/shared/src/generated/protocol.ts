@@ -136,10 +136,10 @@ export interface ColorMappingQuery {
 }
 
 export interface CommandSpec {
-  cmd: str;
-  req: str;
-  res: str;
-  premium?: str;
+  cmd: string;
+  req: string;
+  res: string;
+  premium?: string;
 }
 
 export interface DeviceIdentity {
