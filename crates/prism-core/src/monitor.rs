@@ -307,6 +307,8 @@ fn sample_raw() -> RawSample {
     loop {
         let mut buf = vec![0u8; len as usize];
         let mut ret = 0u32;
+        // SAFETY: buffer pointer + length describe the allocation; ret
+        // points to a u32 out-param. The API only writes within `len`.
         let st: NTSTATUS = unsafe {
             NtQuerySystemInformation(
                 SystemProcessInformation,
@@ -320,11 +322,19 @@ fn sample_raw() -> RawSample {
             let mut procs = Vec::new();
             let mut off = 0usize;
             loop {
+                // SAFETY: entries are laid out back-to-back starting at the
+                // buffer head (API contract); `off` only ever advances by
+                // prior entries' NextEntryOffset while remaining in-bounds.
                 let p = unsafe { &*(buf.as_ptr().add(off).cast::<SYSTEM_PROCESS_INFORMATION_W>()) };
                 let pid = p.UniqueProcessId as u32;
                 if pid != 0 {
+                    // SAFETY: ImageName.Length counts UTF-16 *bytes*; /2 is
+                    // the exact byte→u16 conversion, Buffer points at that
+                    // many u16s for the process's lifetime.
+                    #[allow(clippy::integer_division)]
                     let name_len = p.ImageName.Length as usize / 2;
                     let name = if name_len > 0 && !p.ImageName.Buffer.is_null() {
+                        // SAFETY: see above — Buffer is valid for name_len u16s.
                         let slice =
                             unsafe { std::slice::from_raw_parts(p.ImageName.Buffer, name_len) };
                         String::from_utf16_lossy(slice)
@@ -334,7 +344,10 @@ fn sample_raw() -> RawSample {
                     procs.push(RawProc {
                         pid,
                         name,
-                        cpu_ticks: (p.UserTime + p.KernelTime) as u64 / 100, // 100ns → ms ticks
+                        // 100ns ticks → ms: division by 100 is exact-truncate
+                        // at the documented tick grain.
+                        #[allow(clippy::integer_division)]
+                        cpu_ticks: (p.UserTime + p.KernelTime) as u64 / 100,
                         working_set: p.WorkingSetSize as u64,
                         read: p.ReadTransferCount,
                         write: p.WriteTransferCount,
@@ -416,6 +429,8 @@ fn cpu_times_win() -> (u64, u64) {
         dwLowDateTime: 0,
         dwHighDateTime: 0,
     };
+    // SAFETY: all three out-pointers point to zeroed FILETIME locals of the
+    // exact type the API writes.
     let ok = unsafe { GetSystemTimes(&mut idle, &mut kern, &mut user) };
     if ok == 0 {
         return (0, 0);
@@ -424,7 +439,9 @@ fn cpu_times_win() -> (u64, u64) {
     let idle_t = to_u64(&idle);
     // Kernel FILETIME includes idle; total = user + kernel.
     let total = to_u64(&user) + to_u64(&kern);
-    (idle_t / 10_000, total / 10_000) // → ms
+    // 100ns ticks → ms; truncation at the tick grain is the desired unit.
+    #[allow(clippy::integer_division)]
+    (idle_t / 10_000, total / 10_000)
 }
 
 #[cfg(windows)]
@@ -441,6 +458,8 @@ fn mem_stats() -> (u64, u64) {
         ullAvailVirtual: 0,
         ullAvailExtendedVirtual: 0,
     };
+    // SAFETY: dwLength is set to the struct size (API precondition); ms is
+    // a correctly-typed zeroed local.
     if unsafe { GlobalMemoryStatusEx(&mut ms) } == 0 {
         return (0, 0);
     }

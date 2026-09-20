@@ -91,6 +91,8 @@ pub fn inventory(_include_system: bool) -> Vec<InventoryApp> {
         let mut ty = 0u32;
         let mut len = 0u32;
         let name_p = name.as_ptr();
+        // SAFETY: registry handle and value-name pointer are valid; all
+        // out-pointers point to zero-initialized locals of the right type.
         let res = unsafe {
             RegQueryValueExW(
                 key,
@@ -104,7 +106,12 @@ pub fn inventory(_include_system: bool) -> Vec<InventoryApp> {
         if res != ERROR_SUCCESS || len == 0 || len > 1 << 16 {
             return None;
         }
+        // SAFETY: integer division is exact — RegQueryValueExW reports the
+        // byte length of a UTF-16 string; /2 converts bytes to u16 units.
+        #[allow(clippy::integer_division)]
         let mut buf = vec![0u16; (len as usize) / 2 + 1];
+        // SAFETY: as above; buffer is len+1 u16s, pointer cast matches the
+        // LPBYTE out-param contract.
         let res = unsafe {
             RegQueryValueExW(
                 key,
@@ -127,6 +134,8 @@ pub fn inventory(_include_system: bool) -> Vec<InventoryApp> {
         for wow in [KEY_WOW64_64KEY, KEY_WOW64_32KEY] {
             let sub_w: Vec<u16> = subkey.encode_utf16().chain(std::iter::once(0)).collect();
             let mut h: HKEY = std::ptr::null_mut();
+            // SAFETY: valid predefined root handle + null-terminated subkey
+            // path; out-pointer is a zeroed HKEY local.
             if unsafe { RegOpenKeyExW(root, sub_w.as_ptr(), 0, KEY_READ | wow, &mut h) }
                 != ERROR_SUCCESS
             {
@@ -136,6 +145,8 @@ pub fn inventory(_include_system: bool) -> Vec<InventoryApp> {
             loop {
                 let mut name_buf = [0u16; 256];
                 let mut name_len = 256u32;
+                // SAFETY: fixed 256-u16 buffer with matching length local;
+                // all optional out-params are explicitly null.
                 let res = unsafe {
                     RegEnumKeyExW(
                         h,
@@ -158,6 +169,7 @@ pub fn inventory(_include_system: bool) -> Vec<InventoryApp> {
                     .chain(std::iter::once(0))
                     .collect();
                 let mut app_h: HKEY = std::ptr::null_mut();
+                // SAFETY: same contract as the RegOpenKeyExW call above.
                 if unsafe { RegOpenKeyExW(root, path_w.as_ptr(), 0, KEY_READ | wow, &mut app_h) }
                     != ERROR_SUCCESS
                 {
@@ -167,6 +179,7 @@ pub fn inventory(_include_system: bool) -> Vec<InventoryApp> {
                 let uninst = read_str(app_h, &to_w("UninstallString"));
                 let publisher = read_str(app_h, &to_w("Publisher")).unwrap_or_default();
                 let sys_flag = read_str(app_h, &to_w("SystemComponent"));
+                // SAFETY: closing a handle we opened; no aliasing concerns.
                 unsafe { RegCloseKey(app_h) };
                 let Some(name) = disp else { continue };
                 if name.trim().is_empty() {
@@ -187,10 +200,11 @@ pub fn inventory(_include_system: bool) -> Vec<InventoryApp> {
                     uninstall_cmd: uninst.unwrap_or_default(),
                 });
             }
+            // SAFETY: closing a handle we opened; no aliasing concerns.
             unsafe { RegCloseKey(h) };
         }
     }
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_key(|a| a.name.to_lowercase());
     out
 }
 

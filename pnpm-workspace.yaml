@@ -4,14 +4,13 @@ packages:
   - packages/shared
   - packages/ui
 
+# pnpm 11 build-script approvals (supersedes onlyBuiltDependencies):
+# native deps we trust to run install scripts.
 allowBuilds:
-  esbuild: set this to true or false
-
-onlyBuiltDependencies:
-  - better-sqlite3
-  - cbor-extract
-  - esbuild
-  - electron
-  - '@napi-rs/cli'
+  better-sqlite3: true
+  cbor-extract: true
+  esbuild: true
+  electron: true
+  '@napi-rs/cli': true
 
 verifyDepsBeforeRun: false

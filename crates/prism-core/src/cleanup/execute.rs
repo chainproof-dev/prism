@@ -99,6 +99,9 @@ fn recycle_path(path: &str) -> Result<(), String> {
         lpszProgressTitle: std::ptr::null(),
     };
     // SAFETY: op is fully initialized; pFrom is double-null-terminated.
+    // SAFETY: `op` is a fully-initialized SHFILEOPSTRUCTW whose from/to
+    // pointers are null-terminated UTF-16 buffers outliving the call; the
+    // struct is not aliased (single-threaded call site).
     let rc = unsafe { windows_sys::Win32::UI::Shell::SHFileOperationW(&mut op) };
     if rc != 0 {
         return Err(format!("shell operation failed (code {rc})"));
@@ -127,6 +130,9 @@ fn delete_permanent(path: &str) -> Result<(), String> {
         hNameMappings: std::ptr::null_mut(),
         lpszProgressTitle: std::ptr::null(),
     };
+    // SAFETY: `op` is a fully-initialized SHFILEOPSTRUCTW whose from/to
+    // pointers are null-terminated UTF-16 buffers outliving the call; the
+    // struct is not aliased (single-threaded call site).
     let rc = unsafe { windows_sys::Win32::UI::Shell::SHFileOperationW(&mut op) };
     if rc != 0 {
         return Err(format!("shell operation failed (code {rc})"));

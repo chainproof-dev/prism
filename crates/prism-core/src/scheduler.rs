@@ -341,6 +341,8 @@ fn unregister_task(_id: &str) -> Result<(), EngineError> {
 pub fn utc_offset_minutes() -> i32 {
     #[cfg(windows)]
     {
+        // SAFETY: GetTimeZoneInformation writes into a zeroed, correctly
+        // sized TIME_ZONE_INFORMATION; the pointer is valid for the call.
         unsafe {
             // GetTimeZoneInformation lives in Win32::System::Time; the
             // TIME_ZONE_ID_* result codes live in Win32::System::SystemServices

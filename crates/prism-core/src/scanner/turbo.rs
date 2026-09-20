@@ -312,16 +312,16 @@ mod win {
         let mut mft_extents: Vec<(u64, u64, u64)> = Vec::new(); // (vcn_byte, len, disk_byte)
         for attr in m0.attributes() {
             let view = attr.map_err(EngineError::Ntfs)?;
-            if matches!(view.ty, prism_ntfs::attrs::AttributeType::Data) {
-                if let Some(runs) = view.runs().map_err(EngineError::Ntfs)? {
-                    // map_runs yields (start_vcn_bytes, len_bytes, start_lcn);
-                    // convert LCN → disk byte offset for raw reads.
-                    mft_extents = prism_ntfs::runs::map_runs(&runs, cluster)
-                        .map_err(EngineError::Ntfs)?
-                        .into_iter()
-                        .map(|(v, l, lcn)| (v, l, lcn * cluster))
-                        .collect();
-                }
+            if matches!(view.ty, prism_ntfs::attrs::AttributeType::Data)
+                && let Some(runs) = view.runs().map_err(EngineError::Ntfs)?
+            {
+                // map_runs yields (start_vcn_bytes, len_bytes, start_lcn);
+                // convert LCN → disk byte offset for raw reads.
+                mft_extents = prism_ntfs::runs::map_runs(&runs, cluster)
+                    .map_err(EngineError::Ntfs)?
+                    .into_iter()
+                    .map(|(v, l, lcn)| (v, l, lcn * cluster))
+                    .collect();
             }
         }
         if mft_extents.is_empty() {
@@ -332,6 +332,9 @@ mod win {
 
         // Total MFT bytes = last extent end.
         let mft_len: u64 = mft_extents.iter().map(|(v, l, _)| v + l).max().unwrap_or(0);
+        // MFT byte length → record count; truncation is the exact record
+        // granularity (partial trailing records are not records).
+        #[allow(clippy::integer_division)]
         let n_records = (mft_len / rec_size).min(40 * 1024 * 1024); // sanity ceiling
 
         let mut out = Vec::with_capacity(n_records as usize);
@@ -347,7 +350,7 @@ mod win {
             if !rec.in_use() {
                 continue;
             }
-            if let Some(e) = entry_from_record(i as u64, &rec) {
+            if let Some(e) = entry_from_record(i, &rec) {
                 out.push(e);
             }
         }
@@ -406,36 +409,34 @@ mod win {
             let view = attr.ok()?;
             match view.ty {
                 AttributeType::StandardInformation => {
-                    if let Some((_, v)) = view.resident().ok().flatten() {
-                        if let Ok(si) = StandardInformation::parse(v) {
-                            si_modified = si.modified;
-                            attrs = si.file_permissions;
-                        }
+                    if let Some((_, v)) = view.resident().ok().flatten()
+                        && let Ok(si) = StandardInformation::parse(v)
+                    {
+                        si_modified = si.modified;
+                        attrs = si.file_permissions;
                     }
                 }
                 AttributeType::FileName => {
-                    if let Some((_, v)) = view.resident().ok().flatten() {
-                        if let Ok(fna) = FileNameAttr::parse(v) {
-                            // Rank: WIN32&DOS(3) > WIN32(2) > DOS(1) > POSIX(0)
-                            let rank = match fna.namespace {
-                                3 => 4,
-                                2 => 3,
-                                1 => 1,
-                                _ => 2,
-                            };
-                            let better = best_name
-                                .as_ref()
-                                .map(|(r, _, _)| rank > *r)
-                                .unwrap_or(true);
-                            if better && !fna.name.is_empty() {
-                                best_name =
-                                    Some((rank, fna.name, fna.parent_frn & 0xFFFF_FFFF_FFFF));
-                            }
-                            // Sizes: $FILE_NAME carries them too — prefer $DATA.
-                            // Sizes from $FILE_NAME are stale for live files —
-                            // $DATA (below) is the authority; only the name and
-                            // parent are taken from here.
+                    if let Some((_, v)) = view.resident().ok().flatten()
+                        && let Ok(fna) = FileNameAttr::parse(v)
+                    {
+                        // Rank: WIN32&DOS(3) > WIN32(2) > DOS(1) > POSIX(0)
+                        let rank = match fna.namespace {
+                            3 => 4,
+                            2 => 3,
+                            1 => 1,
+                            _ => 2,
+                        };
+                        let better = best_name
+                            .as_ref()
+                            .map(|(r, _, _)| rank > *r)
+                            .unwrap_or(true);
+                        if better && !fna.name.is_empty() {
+                            best_name = Some((rank, fna.name, fna.parent_frn & 0xFFFF_FFFF_FFFF));
                         }
+                        // Sizes from $FILE_NAME are stale for live files —
+                        // $DATA (below) is the authority; only the name and
+                        // parent are taken from here.
                     }
                 }
                 AttributeType::Data => {

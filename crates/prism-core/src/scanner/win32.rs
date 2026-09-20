@@ -292,12 +292,17 @@ fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> bo
             if off + std::mem::size_of::<FileIdExtdDirectoryInfo>() > buf.len() {
                 return false;
             }
+            // SAFETY: the bounds check above guarantees a full record header
+            // at `off`; NtQueryDirectoryFile lays records back-to-back.
             let rec: &FileIdExtdDirectoryInfo = unsafe { &*(buf.as_ptr().add(off) as *const _) };
             let name_off = off + std::mem::size_of::<FileIdExtdDirectoryInfo>() - 2;
             let name_len = rec.file_name_len as usize;
             if name_off + name_len > buf.len() {
                 return false;
             }
+            // SAFETY: name bytes are inside buf (checked); /2 is the exact
+            // UTF-16 byte→code-unit conversion.
+            #[allow(clippy::integer_division)]
             let name = unsafe {
                 std::slice::from_raw_parts(buf.as_ptr().add(name_off) as *const u16, name_len / 2)
             };
@@ -321,12 +326,17 @@ fn parse_buffer(buf: &[u8], extd: bool, serial: u32, batch: &mut DirBatch) -> bo
             if off + std::mem::size_of::<FileDirectoryInfo>() > buf.len() {
                 return false;
             }
+            // SAFETY: the bounds check above guarantees a full record header
+            // at `off` (same back-to-back layout contract as above).
             let rec: &FileDirectoryInfo = unsafe { &*(buf.as_ptr().add(off) as *const _) };
             let name_off = off + std::mem::size_of::<FileDirectoryInfo>() - 2;
             let name_len = rec.file_name_len as usize;
             if name_off + name_len > buf.len() {
                 return false;
             }
+            // SAFETY: name bytes are inside buf (checked); /2 is the exact
+            // UTF-16 byte→code-unit conversion.
+            #[allow(clippy::integer_division)]
             let name = unsafe {
                 std::slice::from_raw_parts(buf.as_ptr().add(name_off) as *const u16, name_len / 2)
             };
@@ -368,6 +378,7 @@ fn file_id_128(raw: &[u8; 16], serial: u32) -> FileIdentity {
     }
 }
 
+#[allow(clippy::too_many_arguments)] // mirrors the flattened NT record fields
 fn push_entry(
     batch: &mut DirBatch,
     name: &[u16],
@@ -382,10 +393,8 @@ fn push_entry(
         return true; // skip "."-class entries defensively
     }
     // skip `.` and `..`
-    if name.len() <= 2 && name[0] == b'.' as u16 {
-        if name.len() == 1 || name[1] == b'.' as u16 {
-            return true;
-        }
+    if name.len() <= 2 && name[0] == b'.' as u16 && (name.len() == 1 || name[1] == b'.' as u16) {
+        return true;
     }
     let kind = if attrs & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
         if reparse == 0x80000005 {
