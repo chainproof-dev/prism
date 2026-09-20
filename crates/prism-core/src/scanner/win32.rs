@@ -152,32 +152,24 @@ impl Win32NtEnumerator {
     }
 
     fn open_dir(path16: &[u16]) -> Result<NtHandle, (i32, String)> {
-        // NT object-manager prefix. NtOpenFile bypasses the Win32 layer, so
-        // the Win32 "\\?\" form is NOT valid here — the object manager's
-        // device-link directory is "\??\" (\\?\ is a Win32-only spelling of
-        // the same thing, translated by CreateFileW, not by the NT API).
-        // UNC targets map to \??\UNC\server\share.
-        const NT_PREFIX: &[u16] = &[0x5C, 0x3F, 0x3F, 0x5C]; // \??\
-        const NT_UNC_PREFIX: &[u16] = &[0x5C, 0x3F, 0x3F, 0x5C, 0x55, 0x4E, 0x43, 0x5C]; // \??\UNC\
-        let mut full = Vec::with_capacity(path16.len() + 8);
-        let is_unc = path16.starts_with(&[0x5C, 0x5C]); // \\server\share → \??\UNC\server\share
-        let already_prefixed =
-            path16.starts_with(NT_PREFIX) || path16.starts_with(&[0x5C, 0x5C, 0x3F, 0x5C]); // win32 \\?\
-        if !already_prefixed {
-            if is_unc {
-                full.extend_from_slice(NT_UNC_PREFIX);
-                full.extend_from_slice(&path16[2..]); // drop the leading \\
-            } else {
-                full.extend_from_slice(NT_PREFIX);
-            }
-        } else if path16.starts_with(&[0x5C, 0x5C, 0x3F, 0x5C]) {
-            // Win32 \\?\ spelling → NT \??\ spelling (same bytes shifted).
-            full.extend_from_slice(NT_PREFIX);
-            full.extend_from_slice(&path16[4..]);
-        } else {
-            full.extend_from_slice(path16);
+        // NT object-manager path construction lives in `nt_path` (pure,
+        // platform-independent, unit-tested on every CI platform — including
+        // Linux, where path-construction regressions are caught cheaply).
+        // NtOpenFile bypasses the Win32 layer: the Win32 "\\?\" spelling is
+        // invalid here (empty path component → STATUS_OBJECT_NAME_INVALID);
+        // drive paths need the `\??\` DOS-device link directory, UNC maps to
+        // `\??\UNC\server\share`.
+        let mut full = Vec::with_capacity(path16.len() + 9);
+        super::nt_path::push_nt_object_path(path16, &mut full);
+        // UNICODE_STRING length fields are u16 BYTES; refuse over-long paths
+        // loudly (STATUS_NAME_TOO_LONG) instead of truncating the field.
+        if full.len() * 2 > u16::MAX as usize {
+            return Err((
+                0xC000_010Fu32 as i32, // STATUS_NAME_TOO_LONG
+                "path too long for UNICODE_STRING".into(),
+            ));
         }
-        full.push(0);
+
         let mut name = UnicodeString {
             length: (full.len() as u16 - 1) * 2,
             maximum_length: full.len() as u16 * 2,

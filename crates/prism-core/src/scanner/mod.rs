@@ -14,6 +14,7 @@
 
 pub mod coordinator;
 pub mod exclusions;
+pub mod nt_path;
 pub mod packages;
 pub mod posix;
 pub mod turbo;

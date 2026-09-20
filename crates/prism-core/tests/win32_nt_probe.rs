@@ -125,4 +125,16 @@ fn nt_probe_real_open_dir() {
         witness, 0,
         "raw \\??\\ open failed ({witness}) — NT contract broken"
     );
+
+    // The REAL scanner open path must ALSO succeed on the same input —
+    // the production contract (regression gate for the missing-path bug:
+    // open_dir once emitted only the `\??\` prefix without appending the
+    // target path, so every scan root failed with NAME_INVALID).
+    assert_eq!(
+        real,
+        0,
+        "real open_dir failed ({real}, {}) while the raw \\??\\ witness on the \
+         same path succeeded — path construction regressed",
+        status_name(real)
+    );
 }
