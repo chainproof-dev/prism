@@ -16,6 +16,7 @@ pub mod coordinator;
 pub mod exclusions;
 pub mod packages;
 pub mod posix;
+pub mod turbo;
 pub mod win32;
 
 /// Volume-unique file identity for hard-link accounting.
@@ -135,8 +136,11 @@ pub fn unix_to_filetime_ticks(unix_secs: i64) -> i64 {
         .saturating_add(EPOCH_OFFSET_TICKS)
 }
 
-/// Convert FILETIME ticks → unix ms (DTO edge).
+/// Convert FILETIME ticks → unix ms (DTO edge). Integer division is exact
+/// here: FILETIME ticks are 100ns units.
+#[allow(clippy::integer_division)]
 pub fn filetime_ticks_to_unix_ms(ticks: i64) -> i64 {
+    // Integer division is exact here: FILETIME ticks are 100ns units.
     (ticks - EPOCH_OFFSET_TICKS) / 10_000
 }
 

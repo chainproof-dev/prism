@@ -126,7 +126,7 @@ impl ScanManager {
     pub fn start(
         &self,
         target: ScanTarget,
-        _strategy: ScanStrategy,
+        strategy: ScanStrategy,
         options: ScanOptions,
         on_complete: CompletionCb,
     ) -> Result<ScanId> {
@@ -161,6 +161,7 @@ impl ScanManager {
                 let outcome = run_scan(
                     id,
                     &target,
+                    strategy,
                     &options,
                     Arc::clone(&control),
                     Arc::clone(&sink),
@@ -326,11 +327,15 @@ fn cancelled_summary(id: ScanId, started: std::time::Instant) -> ScanSummary {
 fn run_scan(
     id: ScanId,
     target: &ScanTarget,
+    strategy: ScanStrategy,
     options: &ScanOptions,
     control: Arc<Control>,
     sink: Arc<EngineEventSink>,
     phase: Arc<PlMutex<ScanPhase>>,
 ) -> Result<Arc<CompletedScan>> {
+    if strategy == ScanStrategy::Turbo {
+        return run_turbo(id, target, options, control, sink, phase);
+    }
     let started = std::time::Instant::now();
     let roots: Vec<String> = match target {
         ScanTarget::Volume { path } => vec![path.clone()],
@@ -613,8 +618,8 @@ fn run_scan(
                 prism_types::ids::CATEGORY_ROOT
             };
             let attr_flags = meta.attrs
-                | u32::from(link_to != 0) * crate::arena::flags::INTERNAL_LINK2
-                | u32::from(meta.reparse != 0) * crate::arena::flags::REPARSE;
+                | (u32::from(link_to != 0) * crate::arena::flags::INTERNAL_LINK2)
+                | (u32::from(meta.reparse != 0) * crate::arena::flags::REPARSE);
 
             let is_file = node_kind == kind::FILE;
             let nid = arena.push(NodeInput {
@@ -822,6 +827,146 @@ fn run_scan(
         aggregates: Arc::new(aggregates),
         summary,
         errors,
+    }))
+}
+
+/// Turbo strategy body (ADR-06): raw NTFS MFT read → arena. Volume targets
+/// only — a folder target with `strategy=turbo` is an honest error (the MFT
+/// is volume-wide; per-folder would silently become a standard scan).
+fn run_turbo(
+    id: ScanId,
+    target: &ScanTarget,
+    options: &ScanOptions,
+    control: Arc<Control>,
+    sink: Arc<EngineEventSink>,
+    phase: Arc<PlMutex<ScanPhase>>,
+) -> Result<Arc<CompletedScan>> {
+    let started = std::time::Instant::now();
+    let volume = match target {
+        ScanTarget::Volume { path } => {
+            let letter = path.trim_start_matches("\\\\.").trim_matches([':', '\\']);
+            letter.to_string()
+        }
+        _ => {
+            return Err(EngineError::Invalid {
+                field: "strategy=turbo (turbo scans whole NTFS volumes only)",
+            });
+        }
+    };
+
+    *phase.lock() = ScanPhase::Walking;
+    let _ = sink.emit(EngineEvent::ScanPhase {
+        phase: ScanPhaseEvent {
+            scan_id: id,
+            phase: ScanPhase::Walking,
+            detail: Some("reading the NTFS index".into()),
+        },
+    });
+
+    let entries = crate::scanner::turbo::scan_volume(&volume)?;
+    if control.cancel.load(Ordering::Relaxed) {
+        return Err(EngineError::Cancelled);
+    }
+
+    let (mut arena, ext_table, skipped) =
+        crate::scanner::turbo::build_arena(&entries, &format!("{volume}:"))?;
+
+    // Stream deltas so the renderer's live tree builds identically to a
+    // standard scan (chunked ≤ 512 per event, PRISM-IPC-020).
+    let mut delta_buf: Vec<NodeDelta> = Vec::with_capacity(512);
+    for i in 0..arena.len() {
+        let n = i as NodeId;
+        if arena.kind(n) == kind::ROOT {
+            continue;
+        }
+        delta_buf.push(NodeDelta {
+            id: n,
+            parent: arena.parent(n),
+            name: arena.name_str(n),
+            depth: arena.depth(n).min(u32::from(u8::MAX)) as u8,
+            logical: arena.logical(n),
+            allocated: arena.allocated(n as usize),
+            kind: arena.kind(n),
+        });
+        if delta_buf.len() >= 512 {
+            let _ = sink.emit(EngineEvent::ScanNodes {
+                nodes: ScanNodes {
+                    scan_id: id,
+                    deltas: std::mem::take(&mut delta_buf),
+                },
+            });
+        }
+    }
+    if !delta_buf.is_empty() {
+        let _ = sink.emit(EngineEvent::ScanNodes {
+            nodes: ScanNodes {
+                scan_id: id,
+                deltas: delta_buf,
+            },
+        });
+    }
+
+    *phase.lock() = ScanPhase::Aggregating;
+    let _ = sink.emit(EngineEvent::ScanPhase {
+        phase: ScanPhaseEvent {
+            scan_id: id,
+            phase: ScanPhase::Aggregating,
+            detail: None,
+        },
+    });
+
+    // free-space pseudo-node under the root (parity-SCN-04).
+    let root_id: NodeId = 0;
+    let free_bytes = crate::sysinfo::volume_free_bytes(&format!("{volume}:\\"));
+    {
+        let name16: Vec<u16> = "<free space>".encode_utf16().collect();
+        let fid = arena.push(NodeInput {
+            parent: root_id,
+            name_utf16: &name16,
+            logical: free_bytes,
+            allocated: free_bytes,
+            files: 0,
+            folders: 0,
+            mtime: 0,
+            kind: kind::FREE_SPACE,
+            category: prism_types::ids::CATEGORY_FREE_SPACE,
+            ext_id: 0,
+            attr_flags: 0,
+            link_to: 0,
+            err_code: 0,
+        });
+        arena.attach(root_id, fid);
+    }
+    arena.finalize_children();
+
+    *phase.lock() = ScanPhase::IndexingExt;
+    let aggregates = agg::compute(&arena, &ext_table);
+
+    let files = arena.files(root_id) as u64;
+    let folders = arena.folders(root_id) as u64;
+    let logical = arena.logical(root_id);
+    let allocated = arena.allocated(root_id as usize);
+    let summary = crate::scanner::turbo::turbo_summary(
+        id,
+        &format!("{volume}:\\"),
+        files,
+        folders,
+        logical,
+        allocated,
+        free_bytes,
+        started.elapsed().as_millis() as u64,
+        skipped,
+    );
+    let _ = options; // exclusions apply to walks; MFT reads everything (v1:
+    // the arena carries all records; filtering is a viz-layer concern and is
+    // documented in AMM-004).
+
+    Ok(Arc::new(CompletedScan {
+        arena: Arc::new(arena),
+        ext_table: Arc::new(ext_table),
+        aggregates: Arc::new(aggregates),
+        summary,
+        errors: Vec::new(),
     }))
 }
 

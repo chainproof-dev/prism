@@ -1,7 +1,12 @@
 //! Cleanup engine surface: preset rule table (docs/12 § 2) + protected-path
-//! blocklist (parity-DEL-05) + staging queue. Deletion execution itself is
-//! platform IFileOperation-class work (Windows, Phase 5) — staging,
-//! matching and safety classification are pure and shipped now.
+//! blocklist (parity-DEL-05) + staging queue; `execute` implements the
+//! deletion contract (docs/10 § 13).
+
+// Preset rule table (docs/12 § 2) + protected-path blocklist
+// (parity-DEL-05) + staging queue. `execute.rs` implements the deletion
+// contract (shell recycle/permanent + fail-loud outcomes).
+
+pub mod execute;
 
 use prism_types::types_list::CleanupItem;
 
@@ -213,6 +218,11 @@ impl StagingQueue {
         }
     }
 
+    /// Unstage by predicate (used by execute: successful items leave).
+    pub fn unstage_filtered(&mut self, mut remove: impl FnMut(&CleanupItem) -> bool) {
+        self.items.retain(|i| !remove(i));
+    }
+
     /// Unstage by node ids (empty = clear all).
     pub fn unstage(&mut self, node_ids: &[NodeId]) {
         if node_ids.is_empty() {
@@ -243,10 +253,12 @@ pub fn preset_hits(arena: &Arena, preset: &Preset) -> Vec<NodeId> {
     for p in preset.patterns {
         let normalized = p.replace('\\', "/");
         for seg in normalized.split('/') {
-            if seg != "**" && !seg.is_empty() && !seg.contains(['*', '?', '[']) {
-                if !names.iter().any(|n| n.eq_ignore_ascii_case(seg)) {
-                    names.push(seg.to_string());
-                }
+            if seg != "**"
+                && !seg.is_empty()
+                && !seg.contains(['*', '?', '['])
+                && !names.iter().any(|n| n.eq_ignore_ascii_case(seg))
+            {
+                names.push(seg.to_string());
             }
         }
     }

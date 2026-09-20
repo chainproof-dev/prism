@@ -262,7 +262,6 @@ pub const COMMANDS: &[CommandSpec] = &[
 
 /// Helper DTOs referenced only by the table above live here so the emitter
 /// finds them alongside the core modules.
-
 /// `sys:volumes` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

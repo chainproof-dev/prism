@@ -2,6 +2,8 @@
 //! real coordinator (dev backend), and verify the invariants (PRISM-DM-030):
 //! Σ children == parent, exclusions prune, cancellation is fast, viz frames lay out.
 
+#![allow(clippy::expect_used, clippy::unwrap_used)] // integration-test policy (docs/06 § 12)
+
 use std::sync::Arc;
 
 use prism_core::ipc::EngineEventSink;

@@ -11,12 +11,16 @@
 #![deny(missing_docs)]
 
 pub mod agg;
+pub mod apps;
 pub mod arena;
 pub mod cleanup;
 pub mod dupes;
 pub mod error;
+pub mod export;
 pub mod ipc;
 pub mod licensing;
+pub mod monitor;
+pub mod persistence;
 pub mod scanner;
 pub mod sysinfo;
 pub mod viz;

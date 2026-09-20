@@ -16,7 +16,7 @@
 //! ```
 
 /// Frame magic.
-pub const MAGIC: u32 = u32::from_le_bytes([b'P', b'V', b'F', b'1']);
+pub const MAGIC: u32 = u32::from_le_bytes(*b"PVF1");
 /// Current format version.
 pub const VERSION: u32 = 1;
 /// Header length in bytes.

@@ -466,6 +466,8 @@ pub fn age_bucket(mtime_unix_ms: i64, now_ms: i64) -> usize {
     if mtime_unix_ms <= 0 {
         return 5;
     }
+    // Intentional integer division: whole days is exactly the bucket grain.
+    #[allow(clippy::integer_division)]
     let age_days = (now_ms - mtime_unix_ms).max(0) / 86_400_000;
     for (i, edge) in AGE_BUCKET_EDGES_DAYS.iter().enumerate() {
         if age_days < *edge {

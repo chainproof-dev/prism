@@ -158,3 +158,343 @@ mod tests {
         assert_eq!(full.len(), 32);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Pipeline runner (PRISM-HG-030): cancellable, progress-emitting, honest
+// per-phase events (docs/05 § 4). Runs on a worker thread owned by the IPC
+// layer; `run` is the pure-ish core given a sink + cancel flag.
+// ---------------------------------------------------------------------------
+
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
+
+use prism_types::events::{DupesProgress, EngineEvent};
+use prism_types::types_list::DupesPhase;
+
+use crate::ipc::EngineEventSink;
+
+/// Full dupes run result.
+pub struct DupesRun {
+    /// Confirmed byte-identical groups (largest reclaimable first).
+    pub groups: Vec<DuplicateGroup>,
+    /// Total reclaimable = Σ (n−1)×size.
+    pub reclaimable: u64,
+    /// Files whose read failed during hashing (per-file errors, fail-loud).
+    pub errors: Vec<(String, String)>,
+}
+
+/// Run the full pipeline over a completed scan's arena.
+///
+/// Phases (docs/12 § 4): size grouping → (size, ext) filter → partial
+/// fingerprint (XXH128 first+last 64 KiB) → full BLAKE3 → hard-link collapse.
+/// The full hash is the final arbiter; partials only prune.
+pub fn run(
+    arena: &Arena,
+    root_path: &str,
+    min_bytes: u64,
+    sink: &EngineEventSink,
+    cancel: &AtomicBool,
+) -> DupesRun {
+    let mut errors: Vec<(String, String)> = Vec::new();
+    let mut groups: Vec<DuplicateGroup> = Vec::new();
+
+    // Phase 1 — group by size (candidates ≥ min and non-solo).
+    let _ = sink.emit(EngineEvent::DupesProgress {
+        dupes: DupesProgress {
+            phase: DupesPhase::GroupingSizes,
+            groups_found: 0,
+            hashed_bytes: 0,
+        },
+    });
+    let by_size = group_by_size(arena);
+    let mut candidates: Vec<(u64, Vec<NodeId>)> = by_size
+        .into_iter()
+        .filter(|(size, v)| *size >= min_bytes.max(1) && v.len() > 1)
+        .collect();
+    candidates.sort_by_key(|c| std::cmp::Reverse(c.0));
+
+    if cancel.load(AtomicOrdering::Relaxed) {
+        return DupesRun {
+            groups,
+            reclaimable: 0,
+            errors,
+        };
+    }
+
+    // Phase 2 — partial fingerprints (parallel over candidates; reads only
+    // candidate files — docs/12 § 4 I/O honesty).
+    let _ = sink.emit(EngineEvent::DupesProgress {
+        dupes: DupesProgress {
+            phase: DupesPhase::GroupingExt,
+            groups_found: candidates.len() as u64,
+            hashed_bytes: 0,
+        },
+    });
+    let mut hashed_bytes: u64 = 0;
+    let mut fp_groups: Vec<(u64, Vec<NodeId>)> = Vec::new(); // (size, survivors)
+    for (size, nodes) in &candidates {
+        if cancel.load(AtomicOrdering::Relaxed) {
+            return DupesRun {
+                groups,
+                reclaimable: 0,
+                errors,
+            };
+        }
+        // Fingerprint each member; group by fingerprint.
+        let mut by_fp: std::collections::HashMap<[u8; 16], Vec<NodeId>> =
+            std::collections::HashMap::new();
+        for &n in nodes {
+            let path = crate::ipc::node_path(arena, n, root_path);
+            match partial_fingerprint(std::path::Path::new(&path), *size) {
+                Ok(fp) => {
+                    hashed_bytes += FINGERPRINT_WINDOW.min(*size);
+                    by_fp.entry(fp).or_default().push(n);
+                }
+                Err(e) => errors.push((path, e)),
+            }
+        }
+        for (_, members) in by_fp {
+            if members.len() > 1 {
+                fp_groups.push((*size, members));
+            }
+        }
+    }
+
+    // Phase 3 — full BLAKE3 (final arbiter).
+    let _ = sink.emit(EngineEvent::DupesProgress {
+        dupes: DupesProgress {
+            phase: DupesPhase::FullHashing,
+            groups_found: fp_groups.len() as u64,
+            hashed_bytes,
+        },
+    });
+    let mut confirmed: Vec<(u64, Vec<NodeId>)> = Vec::new();
+    for (size, nodes) in fp_groups {
+        if cancel.load(AtomicOrdering::Relaxed) {
+            return DupesRun {
+                groups,
+                reclaimable: 0,
+                errors,
+            };
+        }
+        let mut by_hash: std::collections::HashMap<[u8; 32], Vec<NodeId>> =
+            std::collections::HashMap::new();
+        for n in nodes {
+            let path = crate::ipc::node_path(arena, n, root_path);
+            match full_hash(std::path::Path::new(&path)) {
+                Ok(h) => {
+                    hashed_bytes += size;
+                    by_hash.entry(h).or_default().push(n);
+                }
+                Err(e) => errors.push((path, e)),
+            }
+        }
+        for (_, members) in by_hash {
+            if members.len() > 1 {
+                confirmed.push((size, members));
+            }
+        }
+    }
+
+    // Phase 4 — build groups with hard-link collapse + kept-first ordering.
+    let mut reclaimable: u64 = 0;
+    for (gid, (size, mut members)) in confirmed.into_iter().enumerate() {
+        // Oldest mtime first = "kept" (least destructive default).
+        members.sort_by_key(|&n| arena.mtime(n));
+        let kept_link = arena.link_to(members[0]);
+        let hardlinked: Vec<bool> = members
+            .iter()
+            .map(|&n| kept_link != 0 && arena.link_to(n) == kept_link)
+            .collect();
+        // Members hardlinked to the kept instance are not waste — collapse.
+        let waste_members: Vec<usize> = (0..members.len()).filter(|&i| !hardlinked[i]).collect();
+        let n_waste = waste_members.len().saturating_sub(1).max(
+            // If kept is hardlinked with others, waste = non-linked members − 1.
+            members
+                .len()
+                .saturating_sub(hardlinked.iter().filter(|&&h| h).count() + 1),
+        );
+        if members.len() < 2 {
+            continue;
+        }
+        let g = group_from_nodes(arena, root_path, &members, &hardlinked);
+        let g = DuplicateGroup {
+            group_id: gid as u32 + 1,
+            members: g
+                .members
+                .into_iter()
+                .zip(hardlinked.iter())
+                .map(|(mut m, &hl)| {
+                    if hl {
+                        m.hardlink_of_kept = true;
+                        m.kept = true; // hard links share the same bytes — not waste
+                    }
+                    m
+                })
+                .collect(),
+            reclaimable: size.saturating_mul(n_waste as u64),
+        };
+        reclaimable += g.reclaimable;
+        groups.push(g);
+    }
+    groups.sort_by_key(|g| std::cmp::Reverse(g.reclaimable));
+
+    let _ = sink.emit(EngineEvent::DupesProgress {
+        dupes: DupesProgress {
+            phase: DupesPhase::Done,
+            groups_found: groups.len() as u64,
+            hashed_bytes,
+        },
+    });
+
+    DupesRun {
+        groups,
+        reclaimable,
+        errors,
+    }
+}
+
+/// Convenience: stage all duplicate extras (non-kept members) into the
+/// cleanup queue (guarded by the ledger confirm in the UI, not here).
+pub fn extras_of(groups: &[DuplicateGroup]) -> Vec<u32> {
+    groups
+        .iter()
+        .flat_map(|g| {
+            g.members
+                .iter()
+                .filter(|m| !m.kept && !m.hardlink_of_kept)
+                .map(|m| m.node_id)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod run_tests {
+    use super::*;
+    use crate::arena::NodeInput;
+    use crate::arena::kind;
+
+    fn arena_with_dupes(dir: &std::path::Path) -> Arena {
+        let mut a = Arena::with_capacity(16);
+        let root = a.push(NodeInput {
+            parent: 0,
+            name_utf16: &dir
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .encode_utf16()
+                .collect::<Vec<_>>(),
+            logical: 0,
+            allocated: 0,
+            files: 3,
+            folders: 0,
+            mtime: 0,
+            kind: kind::ROOT,
+            category: 0,
+            ext_id: 0,
+            attr_flags: 0,
+            link_to: 0,
+            err_code: 0,
+        });
+        let mk = |a: &mut Arena, name: &str, bytes: u64, mtime: i64| {
+            let n = a.push(NodeInput {
+                parent: root,
+                name_utf16: &name.encode_utf16().collect::<Vec<_>>(),
+                logical: bytes,
+                allocated: bytes,
+                files: 1,
+                folders: 0,
+                mtime,
+                kind: kind::FILE,
+                category: 0,
+                ext_id: 0,
+                attr_flags: 0,
+                link_to: 0,
+                err_code: 0,
+            });
+            a.attach(root, n);
+        };
+        mk(&mut a, "a.bin", 120_000, 1_000);
+        mk(&mut a, "b.bin", 120_000, 2_000); // identical content → dupe of a
+        mk(&mut a, "c.bin", 120_000, 3_000); // identical content → dupe of a
+        mk(&mut a, "d.bin", 120_000, 4_000); // DIFFERENT content → survives only if hash differs
+        mk(&mut a, "e.bin", 10, 5_000); // below min
+        a.finalize_children();
+        a
+    }
+
+    #[test]
+    fn pipeline_finds_exact_groups_only() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(dir.path().join("a.bin"), vec![1u8; 120_000])
+            .unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(dir.path().join("b.bin"), vec![1u8; 120_000])
+            .unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(dir.path().join("c.bin"), vec![1u8; 120_000])
+            .unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(dir.path().join("d.bin"), vec![9u8; 120_000])
+            .unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(dir.path().join("e.bin"), vec![3u8; 10]).unwrap_or_else(|e| panic!("{e}"));
+
+        let arena = arena_with_dupes(dir.path());
+        let root = dir.path().to_string_lossy().into_owned();
+        let cancel = AtomicBool::new(false);
+        let run = run(&arena, &root, 1024, &EngineEventSink::for_tests(), &cancel);
+
+        assert_eq!(run.groups.len(), 1, "only the a/b/c trio is byte-identical");
+        let g = &run.groups[0];
+        assert_eq!(g.members.len(), 3);
+        assert_eq!(g.reclaimable, 2 * 120_000, "two extras reclaimable");
+        assert!(g.members.iter().filter(|m| m.kept).count() >= 1);
+        assert!(run.errors.is_empty());
+    }
+
+    #[test]
+    fn min_size_filter_honored() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(dir.path().join("a.bin"), vec![1u8; 64]).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(dir.path().join("b.bin"), vec![1u8; 64]).unwrap_or_else(|e| panic!("{e}"));
+        let arena = arena_with_dupes(dir.path());
+        let root = dir.path().to_string_lossy().into_owned();
+        let cancel = AtomicBool::new(false);
+        let run = run(
+            &arena,
+            &root,
+            1024 * 1024,
+            &EngineEventSink::for_tests(),
+            &cancel,
+        );
+        assert!(run.groups.is_empty(), "min size filters everything");
+    }
+
+    #[test]
+    fn extras_of_excludes_kept() {
+        let g = DuplicateGroup {
+            group_id: 1,
+            members: vec![
+                DuplicateMember {
+                    node_id: 1,
+                    path: "a".into(),
+                    bytes: 5,
+                    mtime: None,
+                    kept: true,
+                    partial_hashed: true,
+                    full_hashed: true,
+                    hardlink_of_kept: false,
+                },
+                DuplicateMember {
+                    node_id: 2,
+                    path: "b".into(),
+                    bytes: 5,
+                    mtime: None,
+                    kept: false,
+                    partial_hashed: true,
+                    full_hashed: true,
+                    hardlink_of_kept: false,
+                },
+            ],
+            reclaimable: 5,
+        };
+        assert_eq!(extras_of(&[g]), vec![2]);
+    }
+}

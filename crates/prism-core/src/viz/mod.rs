@@ -140,6 +140,7 @@ impl Ctx<'_> {
         self.tiles.len() as u32 >= self.budget
     }
 
+    #[allow(clippy::too_many_arguments)] // tile geometry is inherently positional
     fn push(&mut self, node: NodeId, x: f32, y: f32, w: f32, h: f32, depth: u16, extra: u16) {
         if self.over_budget() {
             return;
@@ -154,21 +155,23 @@ impl Ctx<'_> {
         }
         let color = palette_index(a, node, self.options.color_mode);
         // labels: big-enough tiles only (docs/11 § 3.3)
-        if self.mode == VizMode::Treemap || self.mode == VizMode::Icicle {
-            if h >= 28.0 && w >= 42.0 && self.labels.len() < 512 {
-                let name = a.name_str(node);
-                let display = if name.chars().count() > 24 {
-                    format!("{}…", name.chars().take(22).collect::<String>())
-                } else {
-                    name
-                };
-                self.labels.push(Label {
-                    node_id: node as i32,
-                    x: x + 4.0,
-                    y: y + 14.0,
-                    text: display,
-                });
-            }
+        if (self.mode == VizMode::Treemap || self.mode == VizMode::Icicle)
+            && h >= 28.0
+            && w >= 42.0
+            && self.labels.len() < 512
+        {
+            let name = a.name_str(node);
+            let display = if name.chars().count() > 24 {
+                format!("{}…", name.chars().take(22).collect::<String>())
+            } else {
+                name
+            };
+            self.labels.push(Label {
+                node_id: node as i32,
+                x: x + 4.0,
+                y: y + 14.0,
+                text: display,
+            });
         }
         self.tiles.push(Tile {
             node_id: node as i32,

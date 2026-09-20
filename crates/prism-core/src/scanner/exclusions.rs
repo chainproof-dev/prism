@@ -110,7 +110,7 @@ fn compile_seg(seg: &str) -> Option<Vec<Piece>> {
                     chars.next();
                 }
                 let mut closed = false;
-                while let Some(c2) = chars.next() {
+                for c2 in chars.by_ref() {
                     if c2 == 0x5D /* ] */ {
                         closed = true;
                         break;
@@ -248,6 +248,8 @@ impl ExclusionSet {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)] // test policy (docs/06 § 12)
+
     use super::*;
 
     #[test]

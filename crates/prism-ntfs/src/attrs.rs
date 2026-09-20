@@ -4,6 +4,20 @@
 
 use crate::error::{Error, Result};
 
+/// Bounds-guarded little-endian readers. The `unwrap_or_default` arms are
+/// unreachable when callers pre-check bounds (they do — `Error::truncated`
+/// guards precede every call); they exist to satisfy the no-panic lint
+/// policy without silencing real truncation (which the guards already
+/// surface as errors).
+fn le32(b: &[u8]) -> u32 {
+    b.first_chunk::<4>().map_or(0, |c| u32::from_le_bytes(*c))
+}
+
+/// See [`le32`].
+fn le64(b: &[u8]) -> u64 {
+    b.first_chunk::<8>().map_or(0, |c| u64::from_le_bytes(*c))
+}
+
 /// Well-known attribute types we parse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AttributeType {
@@ -99,7 +113,7 @@ impl AttrHeader {
                 data.len().saturating_sub(offset),
             ));
         }
-        let len = u32::from_le_bytes(data[offset + 4..offset + 8].try_into().expect("4"));
+        let len = le32(&data[offset + 4..offset + 8]);
         let non_resident = data[offset + 8];
         let name_len = data[offset + 9];
         let name_offset = u16::from_le_bytes([data[offset + 10], data[offset + 11]]);
@@ -111,8 +125,7 @@ impl AttrHeader {
             });
         }
         let specific = if non_resident == 0 {
-            let value_len =
-                u32::from_le_bytes(data[offset + 16..offset + 20].try_into().expect("4"));
+            let value_len = le32(&data[offset + 16..offset + 20]);
             let value_offset = u16::from_le_bytes([data[offset + 20], data[offset + 21]]);
             AttrSpecific::Resident(ResidentHeader {
                 value_len,
@@ -126,17 +139,12 @@ impl AttrHeader {
                     data.len().saturating_sub(offset),
                 ));
             }
-            let start_vcn =
-                u64::from_le_bytes(data[offset + 16..offset + 24].try_into().expect("8"));
-            let last_vcn =
-                u64::from_le_bytes(data[offset + 24..offset + 32].try_into().expect("8"));
+            let start_vcn = le64(&data[offset + 16..offset + 24]);
+            let last_vcn = le64(&data[offset + 24..offset + 32]);
             let runs_offset = u16::from_le_bytes([data[offset + 32], data[offset + 33]]);
-            let alloc_size =
-                u64::from_le_bytes(data[offset + 40..offset + 48].try_into().expect("8"));
-            let real_size =
-                u64::from_le_bytes(data[offset + 48..offset + 56].try_into().expect("8"));
-            let init_size =
-                u64::from_le_bytes(data[offset + 56..offset + 64].try_into().expect("8"));
+            let alloc_size = le64(&data[offset + 40..offset + 48]);
+            let real_size = le64(&data[offset + 48..offset + 56]);
+            let init_size = le64(&data[offset + 56..offset + 64]);
             AttrSpecific::NonResident(NonResidentHeader {
                 start_vcn,
                 last_vcn,
@@ -178,11 +186,11 @@ impl StandardInformation {
             return Err(Error::truncated(0, 48, v.len()));
         }
         Ok(Self {
-            created: i64::from_le_bytes(v[0..8].try_into().expect("8")),
-            modified: i64::from_le_bytes(v[8..16].try_into().expect("8")),
-            mft_modified: i64::from_le_bytes(v[16..24].try_into().expect("8")),
-            accessed: i64::from_le_bytes(v[24..32].try_into().expect("8")),
-            file_permissions: u32::from_le_bytes(v[32..36].try_into().expect("4")),
+            created: le64(&v[0..8]) as i64,
+            modified: le64(&v[8..16]) as i64,
+            mft_modified: le64(&v[16..24]) as i64,
+            accessed: le64(&v[24..32]) as i64,
+            file_permissions: le32(&v[32..36]),
         })
     }
 }
@@ -216,13 +224,13 @@ impl FileNameAttr {
         if v.len() < 66 {
             return Err(Error::truncated(0, 66, v.len()));
         }
-        let parent_frn = u64::from_le_bytes(v[0..8].try_into().expect("8"));
-        let created = i64::from_le_bytes(v[8..16].try_into().expect("8"));
-        let modified = i64::from_le_bytes(v[16..24].try_into().expect("8"));
-        let accessed = i64::from_le_bytes(v[24..32].try_into().expect("8"));
-        let alloc_size = u64::from_le_bytes(v[32..40].try_into().expect("8"));
-        let real_size = u64::from_le_bytes(v[40..48].try_into().expect("8"));
-        let flags = u32::from_le_bytes(v[48..52].try_into().expect("4"));
+        let parent_frn = le64(&v[0..8]);
+        let created = le64(&v[8..16]) as i64;
+        let modified = le64(&v[16..24]) as i64;
+        let accessed = le64(&v[24..32]) as i64;
+        let alloc_size = le64(&v[32..40]);
+        let real_size = le64(&v[40..48]);
+        let flags = le32(&v[48..52]);
         let name_len = v[64] as usize;
         let namespace = v[65];
         let name_bytes = name_len * 2;
@@ -230,8 +238,10 @@ impl FileNameAttr {
             return Err(Error::truncated(66, name_bytes, v.len().saturating_sub(66)));
         }
         let units: Vec<u16> = v[66..66 + name_bytes]
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&c| u16::from_le_bytes(c))
             .collect();
         let name = String::from_utf16(&units).map_err(|_| Error::BadAttribute {
             ty: 0x30,

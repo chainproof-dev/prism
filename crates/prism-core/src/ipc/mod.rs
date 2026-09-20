@@ -23,6 +23,8 @@ use prism_types::events::EngineEvent;
 use prism_types::scan::{ChildrenQuery, NodeRow, NodeRowsPage, ScanSummary};
 use prism_types::viz::VizLayoutQuery;
 
+pub mod extend;
+
 use crate::arena::{Arena, NodeId, kind};
 use crate::error::EngineError;
 use crate::scanner::coordinator::{CompletedScan, ScanManager};
@@ -33,7 +35,7 @@ use crate::{agg, licensing, sysinfo, viz};
 // ---------------------------------------------------------------------------
 
 /// EngineError → napi error carrying the wire kind (PRISM-IPC-003).
-fn ne(e: EngineError) -> napi::Error {
+pub(crate) fn ne(e: EngineError) -> napi::Error {
     napi::Error::new(
         Status::GenericFailure,
         format!(
@@ -54,7 +56,7 @@ fn je(e: serde_json::Error) -> napi::Error {
     )
 }
 
-fn parse_payload<T: serde::de::DeserializeOwned>(v: Value) -> Result<T> {
+pub(crate) fn parse_payload<T: serde::de::DeserializeOwned>(v: Value) -> Result<T> {
     serde_json::from_value(v).map_err(|e| {
         napi::Error::new(
             Status::InvalidArg,
@@ -66,7 +68,7 @@ fn parse_payload<T: serde::de::DeserializeOwned>(v: Value) -> Result<T> {
     })
 }
 
-fn to_json<T: serde::Serialize>(v: T) -> Result<Value> {
+pub(crate) fn to_json<T: serde::Serialize>(v: T) -> Result<Value> {
     serde_json::to_value(v).map_err(je)
 }
 
@@ -86,7 +88,7 @@ fn panic_to_napi(e: Box<dyn std::any::Any + Send>) -> napi::Error {
 }
 
 /// A5: contain unwinds at the FFI boundary.
-fn contain<T>(f: impl FnOnce() -> Result<T> + std::panic::UnwindSafe) -> Result<T> {
+pub(crate) fn contain<T>(f: impl FnOnce() -> Result<T> + std::panic::UnwindSafe) -> Result<T> {
     std::panic::catch_unwind(f).unwrap_or_else(|e| Err(panic_to_napi(e)))
 }
 
@@ -117,6 +119,15 @@ impl EngineEventSink {
 
 impl Default for EngineEventSink {
     fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EngineEventSink {
+    /// Test-only sink: events route to the global channel like production,
+    /// so tests observe them through the same pump (no second code path).
+    #[cfg(test)]
+    pub fn for_tests() -> Self {
         Self::new()
     }
 }
@@ -167,7 +178,10 @@ pub fn engine_attach_event_sink(callback: Function<'_, String, ()>) -> Result<()
     Ok(())
 }
 
-fn flush(tsfn: &ThreadsafeFunction<String, (), String, napi::Status, false>, batch: &mut Vec<EngineEvent>) {
+fn flush(
+    tsfn: &ThreadsafeFunction<String, (), String, napi::Status, false>,
+    batch: &mut Vec<EngineEvent>,
+) {
     if batch.is_empty() {
         return;
     }
@@ -196,12 +210,34 @@ pub struct EngineState {
     pub grants: PlMutex<Option<prism_types::licensing::EntitlementGrants>>,
     /// Device identity for engine-side binding checks.
     pub instance_id: PlMutex<String>,
+    /// App database (opened by main via `engine_open_db`).
+    pub db: PlMutex<Option<Arc<crate::persistence::Db>>>,
+    /// The cleanup staging queue (ledger source of truth).
+    pub queue: PlMutex<crate::cleanup::StagingQueue>,
+    /// Duplicate pipeline runs.
+    pub dupes: PlMutex<extend::DupesManager>,
+    /// Live monitor session.
+    pub monitor: PlMutex<Option<crate::monitor::MonitorHandle>>,
+    /// User type-color overrides (db-hydrated).
+    pub colors: PlMutex<std::collections::HashMap<String, String>>,
+}
+
+impl EngineState {
+    /// Cloned db handle (must have been opened).
+    pub fn db_arc(&self) -> Result<Arc<crate::persistence::Db>> {
+        self.db.lock().clone().ok_or_else(|| {
+            napi::Error::new(
+                Status::GenericFailure,
+                "app.db not opened (call engine_open_db first)",
+            )
+        })
+    }
 }
 
 static STATE: std::sync::OnceLock<Arc<EngineState>> = std::sync::OnceLock::new();
-static SINK: std::sync::OnceLock<Arc<EngineEventSink>> = std::sync::OnceLock::new();
+pub(crate) static SINK: std::sync::OnceLock<Arc<EngineEventSink>> = std::sync::OnceLock::new();
 
-fn state() -> Result<Arc<EngineState>> {
+pub(crate) fn state() -> Result<Arc<EngineState>> {
     STATE
         .get()
         .cloned()
@@ -219,6 +255,11 @@ pub fn engine_init() -> Result<()> {
             scans: ScanManager::new(sink),
             grants: PlMutex::new(None),
             instance_id: PlMutex::new(String::new()),
+            db: PlMutex::new(None),
+            queue: PlMutex::new(crate::cleanup::StagingQueue::new()),
+            dupes: PlMutex::new(extend::DupesManager::default()),
+            monitor: PlMutex::new(None),
+            colors: PlMutex::new(Default::default()),
         })
     });
     Ok(())
@@ -246,8 +287,10 @@ pub fn scan_start(payload: Value) -> Result<Value> {
     contain(|| {
         let q: ScanStartQuery = parse_payload(payload)?;
         let st = state()?;
-        // strategy check: turbo is entitlement-gated at the ENGINE boundary
-        // (PRISM-LIC-040); also honestly unavailable until the P5 pipeline.
+        // Turbo is entitlement-gated at the ENGINE boundary (PRISM-LIC-040),
+        // then dispatched by the coordinator (ADR-06: first-class — a
+        // non-NTFS or non-elevated request fails honestly from the strategy
+        // itself, never silently degrades to a standard walk).
         if q.strategy == prism_types::scan::ScanStrategy::Turbo {
             let gated = st
                 .grants
@@ -264,14 +307,15 @@ pub fn scan_start(payload: Value) -> Result<Value> {
                     "{\"kind\":\"not-licensed\",\"feature\":\"turbo\"}",
                 ));
             }
-            return Err(napi::Error::new(
-                Status::GenericFailure,
-                "{\"kind\":\"engine\",\"msg\":\"turbo scan pipeline not enabled in this build\"}",
-            ));
         }
         let st2 = Arc::clone(&st);
         let on_complete: Arc<dyn Fn(u32, Option<Arc<CompletedScan>>) + Send + Sync> =
-            Arc::new(move |id, completed| st2.scans.complete(id, completed));
+            Arc::new(move |id, completed| {
+                if let Some(c) = completed.as_ref() {
+                    extend::record_scan_history(&st2, &c.summary, c.summary.duration_ms);
+                }
+                st2.scans.complete(id, completed);
+            });
         let id = st
             .scans
             .start(q.target, q.strategy, q.options, on_complete)
@@ -347,11 +391,9 @@ pub fn tree_children(payload: Value) -> Result<Value> {
         let mut children = arena.children(q.node_id).to_vec();
         match q.sort.key {
             prism_types::ids::SortKey::Logical => {
-                children.sort_by(|&a, &b| arena.logical(b).cmp(&arena.logical(a)))
+                children.sort_by_key(|&c| std::cmp::Reverse(arena.logical(c)))
             }
-            prism_types::ids::SortKey::Name => {
-                children.sort_by(|&a, &b| arena.name_str(a).cmp(&arena.name_str(b)))
-            }
+            prism_types::ids::SortKey::Name => children.sort_by_key(|&a| arena.name_str(a)),
             _ => {}
         }
         if q.sort.dir == prism_types::ids::SortDir::Asc {
@@ -498,7 +540,12 @@ pub fn node_path(arena: &Arena, node: NodeId, root_path: &str) -> String {
     if joined.is_empty() {
         return root_path.to_string();
     }
-    format!("{}{}{}", root_path.trim_end_matches(['\\', '/']), sep, joined)
+    format!(
+        "{}{}{}",
+        root_path.trim_end_matches(['\\', '/']),
+        sep,
+        joined
+    )
 }
 
 #[napi]
@@ -581,8 +628,8 @@ pub fn types_list(scan_id: u32, sort: String, dir: String) -> Result<Value> {
             .collect();
         match sort.as_str() {
             "name" | "category" => rows.sort_by(|x, y| x.key.cmp(&y.key)),
-            "files" => rows.sort_by(|x, y| y.files.cmp(&x.files)),
-            _ => rows.sort_by(|x, y| y.allocated.cmp(&x.allocated)),
+            "files" => rows.sort_by_key(|r| std::cmp::Reverse(r.files)),
+            _ => rows.sort_by_key(|r| std::cmp::Reverse(r.allocated)),
         }
         if dir == "asc" {
             rows.reverse();

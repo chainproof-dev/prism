@@ -200,9 +200,7 @@ impl AttrView<'_> {
         match &self.header.specific {
             crate::attrs::AttrSpecific::Resident(r) => {
                 let start = self.header.offset + r.value_offset as usize;
-                let end = start
-                    .checked_add(r.value_len as usize)
-                    .unwrap_or(usize::MAX);
+                let end = start.saturating_add(r.value_len as usize);
                 if end > self.data.len() {
                     return Err(Error::truncated(
                         start,
@@ -249,6 +247,7 @@ impl AttrView<'_> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)] // test policy (docs/06 § 12)
     use super::*;
 
     /// Build a synthetic FILE record with one resident $FILE_NAME-ish attribute.

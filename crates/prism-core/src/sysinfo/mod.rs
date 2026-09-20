@@ -86,6 +86,48 @@ pub fn volumes() -> Vec<VolumeInfo> {
 
 /// Free bytes on the volume containing `path` (0 when unknowable — callers
 /// treat 0 as "free space unknown", displayed honestly).
+/// (free, total) of the volume containing `path` — preflight fields.
+pub fn volume_stats(path: &str) -> (u64, u64) {
+    #[cfg(unix)]
+    {
+        crate::sysinfo::posix::stats(path)
+    }
+    #[cfg(windows)]
+    {
+        crate::sysinfo::win32::stats(path)
+    }
+}
+
+/// Does scanning `path` fully require elevation? Windows: system roots
+/// while not elevated. Dev platform: never (the dev backend walks as the
+/// current user; denial shows up honestly in the errors drawer).
+pub fn requires_elevation(path: &str) -> bool {
+    #[cfg(windows)]
+    {
+        if crate::sysinfo::win32::is_elevated() {
+            return false;
+        }
+        const ELEVATED_ROOTS: &[&str] = &[
+            "C:\\Windows",
+            "C:\\Program Files",
+            "C:\\Program Files (x86)",
+            "C:\\ProgramData",
+            "C:\\System Volume Information",
+        ];
+        let p = path.replace('/', "\\").to_lowercase();
+        ELEVATED_ROOTS.iter().any(|r| {
+            let r = r.to_lowercase();
+            p == r || p.starts_with(&format!("{r}\\"))
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        false
+    }
+}
+
+/// Free bytes on the volume containing `path` (0 = unknowable).
 pub fn volume_free_bytes(path: &str) -> u64 {
     #[cfg(unix)]
     {
@@ -122,6 +164,14 @@ pub mod posix {
         f_flag: u64,
         f_namemax: u64,
         __spare: [i32; 6],
+    }
+
+    /// (free, total) via statvfs; (0, 0) when unknowable.
+    pub fn stats(path: &str) -> (u64, u64) {
+        match statvfs_of(path) {
+            Some((total, free, _)) => (free, total),
+            None => (0, 0),
+        }
     }
 
     /// statvfs wrapper (typed error → Option; 0 free = unknown is honest).
@@ -318,6 +368,12 @@ pub mod win32 {
     /// Free bytes for the volume containing `path`.
     pub fn free_bytes(path: &str) -> u64 {
         free_and_total(path).1
+    }
+
+    /// (free, total) for the volume containing `path`.
+    pub fn stats(path: &str) -> (u64, u64) {
+        let (total, free) = free_and_total(path);
+        (free, total)
     }
 
     /// Token-elevation probe (docs/06 § 7 posture).

@@ -334,7 +334,9 @@ fn map_ident(ident: &str) -> String {
         "bool" => "boolean".into(),
         // byte counts cross as BigInt (docs/05 § 3.3 — exact end-to-end)
         "u64" | "i64" | "u128" => "bigint".into(),
-        "u8" | "u16" | "u32" | "i8" | "i16" | "i32" | "usize" | "isize" | "f32" | "f64" => "number".into(),
+        "u8" | "u16" | "u32" | "i8" | "i16" | "i32" | "usize" | "isize" | "f32" | "f64" => {
+            "number".into()
+        }
         _ => ident.to_string(),
     }
 }

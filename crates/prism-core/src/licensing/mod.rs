@@ -102,9 +102,8 @@ fn public_key() -> Result<VerifyingKey, ed25519_dalek::SignatureError> {
 
 fn decode_base64_pubkey_hex(hex: &str) -> [u8; 32] {
     let mut out = [0u8; 32];
-    for i in 0..32 {
-        let byte = u8::from_str_radix(hex.get(2 * i..2 * i + 2).unwrap_or("00"), 16).unwrap_or(0);
-        out[i] = byte;
+    for (i, slot) in out.iter_mut().enumerate() {
+        *slot = u8::from_str_radix(hex.get(2 * i..2 * i + 2).unwrap_or("00"), 16).unwrap_or(0);
     }
     out
 }
@@ -112,7 +111,10 @@ fn decode_base64_pubkey_hex(hex: &str) -> [u8; 32] {
 /// Minimal base64 (std alphabet) decoder — no external dependency for a
 /// fixed, tiny surface (own-implementation policy, A4).
 pub fn decode_base64(s: &str) -> Option<Vec<u8>> {
-    let mut out = Vec::with_capacity(s.len() * 3 / 4);
+    // Capacity estimate only — truncating division is fine here.
+    #[allow(clippy::integer_division)]
+    let cap = s.len() * 3 / 4;
+    let mut out = Vec::with_capacity(cap);
     let mut buf: u32 = 0;
     let mut bits = 0u32;
     for ch in s.bytes() {
@@ -135,6 +137,33 @@ pub fn decode_base64(s: &str) -> Option<Vec<u8>> {
         }
     }
     Some(out)
+}
+
+/// Minimal base64 std encoder (counterpart of `decode_base64`).
+pub fn encode_base64(data: &[u8]) -> String {
+    const TBL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        out.push(TBL[(n >> 18) as usize & 63] as char);
+        out.push(TBL[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 {
+            TBL[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            TBL[n as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
 }
 
 #[cfg(test)]
@@ -174,31 +203,4 @@ mod tests {
             Err(EntitlementError::BadSignature)
         );
     }
-}
-
-/// Minimal base64 std encoder (counterpart of `decode_base64`).
-pub fn encode_base64(data: &[u8]) -> String {
-    const TBL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
-    for chunk in data.chunks(3) {
-        let b = [
-            chunk[0],
-            *chunk.get(1).unwrap_or(&0),
-            *chunk.get(2).unwrap_or(&0),
-        ];
-        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
-        out.push(TBL[(n >> 18) as usize & 63] as char);
-        out.push(TBL[(n >> 12) as usize & 63] as char);
-        out.push(if chunk.len() > 1 {
-            TBL[(n >> 6) as usize & 63] as char
-        } else {
-            '='
-        });
-        out.push(if chunk.len() > 2 {
-            TBL[n as usize & 63] as char
-        } else {
-            '='
-        });
-    }
-    out
 }

@@ -27,6 +27,8 @@ impl PosixDevEnumerator {
 }
 
 impl DirEnumerator for PosixDevEnumerator {
+    // Integer division is exact: ns → 100ns ticks.
+    #[allow(clippy::integer_division)]
     fn enumerate(&mut self, task: &DirTask) -> DirBatch {
         let mut batch = DirBatch {
             dir: task.node,
@@ -53,10 +55,11 @@ impl DirEnumerator for PosixDevEnumerator {
             let name_os = entry.file_name();
             let name_lossy = name_os.to_string_lossy().into_owned();
             let name16: Vec<u16> = name_lossy.encode_utf16().collect();
-            if name16.len() <= 2 && name16.first() == Some(&(b'.' as u16)) {
-                if name16.len() == 1 || name16[1] == b'.' as u16 {
-                    continue; // . and ..
-                }
+            if name16.len() <= 2
+                && name16.first() == Some(&(b'.' as u16))
+                && (name16.len() == 1 || name16[1] == b'.' as u16)
+            {
+                continue; // . and ..
             }
             let meta = match entry.metadata() {
                 Ok(m) => m,
