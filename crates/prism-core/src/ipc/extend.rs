@@ -346,6 +346,7 @@ pub fn duplicates_run(payload: Value) -> Result<Value> {
     contain(|| {
         let q: DupesRunQuery = parse_payload(payload)?;
         let st = state()?;
+        require_feature(&st, "dupes")?;
         let scan = st.scans.completed(q.scan_id).map_err(ne)?;
         let arena = Arc::clone(&scan.arena);
         let root_path = scan.summary.root.clone();
