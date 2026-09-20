@@ -286,22 +286,22 @@ impl DirEnumerator for Win32NtEnumerator {
             // drops the final batch (every small directory enumerated as
             // empty: 0 files, 0 errors — the exact windows-CI signature).
             let len = iosb.information;
-            if len > 0 {
-                if !parse_buffer(
+            if len > 0
+                && !parse_buffer(
                     &self.buf[..len],
                     self.use_extd,
                     self.volume_serial,
                     &mut batch,
-                ) {
-                    // Extd class rejected by this kernel → switch class and retry
-                    // the whole directory once (capability probe, build-time decision).
-                    if self.use_extd {
-                        self.use_extd = false;
-                        return self.enumerate_retry_plain(task);
-                    }
-                    batch.error = Some((-1, "unparseable directory buffer".into()));
-                    break;
+                )
+            {
+                // Extd class rejected by this kernel → switch class and retry
+                // the whole directory once (capability probe, build-time decision).
+                if self.use_extd {
+                    self.use_extd = false;
+                    return self.enumerate_retry_plain(task);
                 }
+                batch.error = Some((-1, "unparseable directory buffer".into()));
+                break;
             }
             if status == STATUS_NO_MORE_FILES || status == STATUS_NO_SUCH_FILE {
                 break;
