@@ -115,3 +115,26 @@ Next:
 1. GitHub Actions: windows-rust + windows-app + screenshots + benches results (fix anything red).
 2. Windows QA sessions: parity rows + NSIS install matrix.
 3. Turbo bench on real NTFS volume.
+
+## Session 4 — the real win32 root-enumeration bug (found, fixed, gated)
+
+Agent: Super Z (main build agent)
+Task: complete remaining implementation; run windows/ubuntu CI to green; validate everything; deliver runnable artifacts + final ZIP.
+
+Done:
+
+### The bug hunt (windows-rust CI, runs 5→7)
+- Run 5 evidence: real-machine scan = 0 files + 1 error at root. First hypothesis (Win32 `\\?\` spelling invalid for NtOpenFile — needs NT `\??\`) produced commit 05d50eb. Did NOT fix it.
+- Probe v1/v2 (tests/win32_nt_probe.rs): raw NT witness with correct nul handling SUCCEEDED while the REAL `open_dir` (via doc-hidden `__probe_open_dir_status` bridge) returned STATUS_OBJECT_NAME_INVALID on the same machine, same input, same test binary — and the build log showed `Compiling prism-core` (fresh), killing the stale-rust-cache theory.
+- Root cause (the embarrassing kind): `open_dir`'s plain-drive-path branch appended ONLY the `\??\` prefix — `full.extend_from_slice(path16)` was missing from that one branch. Every scan root therefore opened the 4-character path `\??\` → NAME_INVALID. The other three branches (already-NT, `\\?\`, UNC) appended the path correctly; a witness copy of the same logic in the test file did too — which is exactly why the probe pair diverged.
+
+### The fix (commit d2c480f)
+- Path construction extracted to `scanner/nt_path.rs` — a **pure, platform-independent** module (no cfg gate) so the string-level tests run on Linux CI where regressions are caught in minutes, not Windows-runner round-trips. 10 unit tests: plain drive path, drive root, `\\?\` rewrite, `\\?\UNC\` rewrite, bare UNC → `\??\UNC\`, canonical `\??\` passthrough, `\Device\` passthrough, single-trailing-nul invariant, and an explicit `never_emits_prefix_without_path` regression guard for this exact bug.
+- `win32.rs::open_dir` now delegates to `nt_path::push_nt_object_path` (+ STATUS_NAME_TOO_LONG guard for >u16-byte UNICODE_STRING lengths — caught by the zig cross-check as an i32 literal overflow, fixed with the `0xC000_010Fu32 as i32` house pattern).
+- Probe upgraded: now ASSERTS the real `open_dir` returns STATUS_SUCCESS (production contract), not just the witness.
+- Local verification: 81 tests green (was 71 — +10 nt_path), clippy -D warnings clean on host AND windows target, fmt clean, zig cross-check green, TS side untouched.
+
+Next:
+1. CI run 35520350144 (11 jobs) to full green — expected windows-rust PASS now.
+2. Download CI artifacts (prism_core.dll windows-x64, staged electron bundle) for the user-testable ZIP.
+3. Final full-workspace ZIP with builds.
