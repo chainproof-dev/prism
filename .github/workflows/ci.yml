@@ -40,7 +40,8 @@ jobs:
       - name: engine napi smoke (real .node, win32 scanner live)
         shell: pwsh
         run: |
-          node -e "const e=require('./target/release/prism_core.dll'); e.engineInit(); console.log('engine', e.engineVersion(), 'OK')"
+          Copy-Item target/release/prism_core.dll target/release/prism_core.node -Force
+          node -e "const e=require('./target/release/prism_core.node'); e.engineInit(); console.log('engine', e.engineVersion(), 'OK')"
       - name: full engine pipeline smoke (scan → summary → children → frames)
         shell: pwsh
         run: |
